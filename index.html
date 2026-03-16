@@ -3,189 +3,1362 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Advanced Userscript/Extension Detector</title>
+<title>TM Script Detector</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap');
+
   :root {
-    --bg: #0f172a;
-    --card: #111827;
-    --border: #1f2937;
-    --text: #e5e7eb;
-    --muted: #9ca3af;
-    --good: #10b981;
-    --warn: #f59e0b;
-    --bad: #ef4444;
+    --bg: #020408;
+    --panel: #060d14;
+    --border: #0f2a3a;
+    --accent: #00e5ff;
+    --accent2: #ff3e6c;
+    --accent3: #39ff14;
+    --warn: #ffaa00;
+    --text: #a8c8d8;
+    --dim: #3a5568;
+    --found: #39ff14;
+    --notfound: #ff3e6c;
+    --pending: #ffaa00;
+    --glow: 0 0 8px #00e5ff66;
+    --glow2: 0 0 8px #39ff1466;
   }
-  * { box-sizing: border-box; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    margin: 0;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(180deg, #0b1220, var(--bg));
+    background: var(--bg);
     color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
   }
-  .wrap { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
-  h1 { font-size: 32px; margin-bottom: 10px; }
-  p.lead { color: var(--muted); margin-top: 0; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin: 20px 0; }
-  .row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
-  .row:last-child { border-bottom: 0; }
-  .label { color: var(--muted); }
-  .status { font-weight: 600; padding: 2px 12px; border-radius: 999px; border: 1px solid var(--border); }
-  .good { color: var(--good); border-color: rgba(16,185,129,.35); }
-  .warn { color: var(--warn); border-color: rgba(245,158,11,.35); }
-  .bad  { color: var(--bad); border-color: rgba(239,68,68,.35); }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  button { background: #1f2937; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
-  button:hover { background: #243041; }
-  footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,255,0.015) 2px,
+      rgba(0,229,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Grid bg */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* HEADER */
+  header {
+    text-align: center;
+    padding: 40px 20px 30px;
+    position: relative;
+  }
+
+  .logo-line {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(22px, 4vw, 48px);
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent), 0 0 40px rgba(0,229,255,0.4);
+    letter-spacing: 0.1em;
+    animation: flicker 6s infinite;
+  }
+
+  .logo-sub {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.4em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  @keyframes flicker {
+    0%,94%,96%,98%,100% { opacity: 1; }
+    95%,97%,99% { opacity: 0.85; }
+  }
+
+  /* STATUS BAR */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    padding: 14px 20px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .status-label {
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+  }
+
+  .status-value {
+    color: var(--accent);
+    font-weight: bold;
+  }
+
+  .verdict {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 8px 24px;
+    border: 2px solid;
+    letter-spacing: 0.1em;
+    transition: all 0.3s;
+  }
+  .verdict.waiting { color: var(--warn); border-color: var(--warn); text-shadow: 0 0 10px var(--warn); }
+  .verdict.detected { color: var(--found); border-color: var(--found); text-shadow: 0 0 10px var(--found); animation: pulse-green 1s infinite; }
+  .verdict.clean { color: var(--notfound); border-color: var(--notfound); text-shadow: 0 0 10px var(--notfound); }
+
+  @keyframes pulse-green {
+    0%,100% { box-shadow: 0 0 6px var(--found), 0 0 12px rgba(57,255,20,0.3); }
+    50% { box-shadow: 0 0 16px var(--found), 0 0 30px rgba(57,255,20,0.5); }
+  }
+
+  /* CONTROL BAR */
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    padding: 10px 22px;
+    border: 1px solid;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .btn-primary {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: rgba(0,229,255,0.1);
+    box-shadow: var(--glow);
+  }
+
+  .btn-danger {
+    color: var(--accent2);
+    border-color: var(--accent2);
+  }
+  .btn-danger:hover {
+    background: rgba(255,62,108,0.1);
+    box-shadow: 0 0 8px rgba(255,62,108,0.4);
+  }
+
+  .btn-success {
+    color: var(--found);
+    border-color: var(--found);
+  }
+  .btn-success:hover {
+    background: rgba(57,255,20,0.1);
+    box-shadow: var(--glow2);
+  }
+
+  /* PROGRESS */
+  .progress-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 14px 20px;
+    margin-bottom: 20px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .progress-bar-bg {
+    height: 6px;
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+    width: 0%;
+    transition: width 0.3s;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* MAIN GRID */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 16px;
+    margin-bottom: 30px;
+  }
+
+  .category-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .category-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,229,255,0.04);
+  }
+
+  .category-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+  }
+
+  .category-count {
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .test-list {
+    padding: 8px 0;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .test-list::-webkit-scrollbar { width: 4px; }
+  .test-list::-webkit-scrollbar-track { background: transparent; }
+  .test-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .test-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 14px;
+    border-bottom: 1px solid rgba(15,42,58,0.5);
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+
+  .test-row:last-child { border-bottom: none; }
+  .test-row:hover { background: rgba(0,229,255,0.03); }
+
+  .test-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+  }
+
+  .icon-pending { background: rgba(255,170,0,0.15); color: var(--warn); border: 1px solid var(--warn); }
+  .icon-found { background: rgba(57,255,20,0.15); color: var(--found); border: 1px solid var(--found); animation: glow-pulse 1.5s infinite; }
+  .icon-clean { background: rgba(255,62,108,0.1); color: var(--dim); border: 1px solid var(--dim); }
+  .icon-running { background: rgba(0,229,255,0.1); color: var(--accent); border: 1px solid var(--accent); animation: spin 1s linear infinite; }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes glow-pulse {
+    0%,100% { box-shadow: 0 0 4px var(--found); }
+    50% { box-shadow: 0 0 10px var(--found); }
+  }
+
+  .test-info { flex: 1; min-width: 0; }
+  .test-name { color: var(--text); line-height: 1.3; }
+  .test-detail {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .test-detail.found { color: var(--found); }
+  .test-detail.notfound { color: var(--dim); }
+
+  /* LOG PANEL */
+  .log-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent2);
+    margin-top: 10px;
+  }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .log-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    color: var(--accent2);
+    letter-spacing: 0.15em;
+  }
+
+  .log-body {
+    height: 200px;
+    overflow-y: auto;
+    padding: 10px 16px;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  .log-body::-webkit-scrollbar { width: 4px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-line { display: block; }
+  .log-line .ts { color: var(--dim); margin-right: 8px; }
+  .log-line .msg-info { color: var(--accent); }
+  .log-line .msg-found { color: var(--found); font-weight: bold; }
+  .log-line .msg-warn { color: var(--warn); }
+  .log-line .msg-err { color: var(--dim); }
+
+  /* SUMMARY */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .stat-num.total { color: var(--accent); text-shadow: 0 0 12px var(--accent); }
+  .stat-num.found-c { color: var(--found); text-shadow: 0 0 12px var(--found); }
+  .stat-num.clean-c { color: var(--dim); }
+  .stat-num.pct { color: var(--warn); }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .grid { grid-template-columns: 1fr; }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Advanced Userscript / Extension Detector</h1>
-    <p class="lead">Detects active userscript managers, tampered APIs, and suspicious browser modifications.</p>
+<div class="container">
 
-    <div class="card">
-      <div class="row"><div class="label">Overall Result</div><div id="overall" class="status warn">Checking…</div></div>
-    </div>
+  <header>
+    <div class="logo-line">◈ TAMPERMONKEY SCRIPT DETECTOR ◈</div>
+    <div class="logo-sub">Active Fingerprint &amp; Injection Probe — v4.2.0</div>
+  </header>
 
-    <div class="card" id="results"></div>
-
-    <div class="card">
-      <div class="row"><div class="label">User Agent</div><div id="ua" class="mono"></div></div>
-      <div class="row"><div class="label">Time</div><div id="time" class="mono"></div></div>
-      <div class="row"><div class="label">Frame Context</div><div id="frame" class="mono"></div></div>
-    </div>
-
-    <div class="card">
-      <button id="rerun">Re-run Detection</button>
-    </div>
-
-    <footer>
-      Heuristic detection only. Advanced setups may hide these signals.
-    </footer>
+  <div class="summary-grid">
+    <div class="stat-box"><div class="stat-num total" id="s-total">0</div><div class="stat-label">Total Tests</div></div>
+    <div class="stat-box"><div class="stat-num found-c" id="s-found">0</div><div class="stat-label">Signals Found</div></div>
+    <div class="stat-box"><div class="stat-num clean-c" id="s-clean">0</div><div class="stat-label">No Signal</div></div>
+    <div class="stat-box"><div class="stat-num pct" id="s-pct">—</div><div class="stat-label">Confidence</div></div>
   </div>
 
+  <div class="status-bar">
+    <div class="status-item">
+      <span class="status-label">STATUS</span>
+      <span class="status-value" id="status-text">READY</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">ELAPSED</span>
+      <span class="status-value" id="elapsed-text">0ms</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">CHECKS/SEC</span>
+      <span class="status-value" id="cps-text">—</span>
+    </div>
+    <div class="verdict waiting" id="verdict">AWAITING SCAN</div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-header">
+      <span id="prog-label">Ready to scan</span>
+      <span id="prog-pct">0%</span>
+    </div>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="prog-bar"></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="btn-scan">▶ RUN FULL SCAN</button>
+    <button class="btn btn-success" id="btn-watch">◉ START LIVE WATCH</button>
+    <button class="btn btn-danger" id="btn-reset">✕ RESET</button>
+  </div>
+
+  <div class="grid" id="test-grid"></div>
+
+  <div class="log-panel">
+    <div class="log-header">
+      <span class="log-title">▸ DETECTION LOG</span>
+      <button class="btn btn-danger" style="font-size:10px;padding:4px 10px;" onclick="document.getElementById('log-body').innerHTML=''">CLR</button>
+    </div>
+    <div class="log-body" id="log-body"></div>
+  </div>
+
+</div>
+
 <script>
-function addRow(container, label, ok, detail) {
-  const row = document.createElement('div');
-  row.className = 'row';
-  const l = document.createElement('div');
-  l.className = 'label';
-  l.textContent = label;
-  const r = document.createElement('div');
-  r.className = 'status ' + (ok === true ? 'bad' : ok === false ? 'good' : 'warn');
-  r.textContent = ok === true ? 'Detected' : ok === false ? 'Not detected' : 'Unknown';
-  if (detail) r.title = detail;
-  row.appendChild(l);
-  row.appendChild(r);
-  container.appendChild(row);
-}
+// ─────────────────────────────────────────────
+//  DETECTION TEST DEFINITIONS
+// ─────────────────────────────────────────────
+const CATEGORIES = [
+  {
+    id: 'gm_api',
+    title: 'GM API / GLOBALS',
+    tests: [
+      { id: 'gm_info',        name: 'GM_info object',           fn: () => checkGlobal('GM_info') },
+      { id: 'gm_xmlhttp',     name: 'GM_xmlhttpRequest',        fn: () => checkGlobal('GM_xmlhttpRequest') },
+      { id: 'gm_setvalue',    name: 'GM_setValue',              fn: () => checkGlobal('GM_setValue') },
+      { id: 'gm_getvalue',    name: 'GM_getValue',              fn: () => checkGlobal('GM_getValue') },
+      { id: 'gm_notification',name: 'GM_notification',          fn: () => checkGlobal('GM_notification') },
+      { id: 'gm_openintab',   name: 'GM_openInTab',             fn: () => checkGlobal('GM_openInTab') },
+      { id: 'gm_setstyle',    name: 'GM_addStyle',              fn: () => checkGlobal('GM_addStyle') },
+      { id: 'gm_registermenu',name: 'GM_registerMenuCommand',   fn: () => checkGlobal('GM_registerMenuCommand') },
+      { id: 'gm_cookie',      name: 'GM_cookie',                fn: () => checkGlobal('GM_cookie') },
+      { id: 'gm_log',         name: 'GM_log',                   fn: () => checkGlobal('GM_log') },
+      { id: 'gm_download',    name: 'GM_download',              fn: () => checkGlobal('GM_download') },
+      { id: 'gm_getresource', name: 'GM_getResourceURL',        fn: () => checkGlobal('GM_getResourceURL') },
+      { id: 'gm4_xmlhttp',    name: 'GM.xmlHttpRequest (GM4)',  fn: () => checkGlobal('GM') && typeof GM === 'object' && typeof GM.xmlHttpRequest === 'function' },
+      { id: 'unsafewindow',   name: 'unsafeWindow present',     fn: () => checkGlobal('unsafeWindow') },
+      { id: 'exportfn',       name: 'exportFunction',           fn: () => checkGlobal('exportFunction') },
+      { id: 'createobj',      name: 'createObjectIn',           fn: () => checkGlobal('createObjectIn') },
+    ]
+  },
+  {
+    id: 'dom_elements',
+    title: 'DOM ELEMENT INJECTION',
+    tests: [
+      { id: 'dom_tm_class',   name: 'Elements with .tm-* class',  fn: () => domQuery('[class*="tm-"]') },
+      { id: 'dom_gm_class',   name: 'Elements with .gm-* class',  fn: () => domQuery('[class*="gm-"]') },
+      { id: 'dom_us_class',   name: 'Elements with .userscript-*',fn: () => domQuery('[class*="userscript"]') },
+      { id: 'dom_tmid',       name: 'Elements with #tm-* id',     fn: () => domQuery('[id*="tm-"],[id*="tamper"]') },
+      { id: 'dom_data_tm',    name: 'data-tm-* attributes',       fn: () => domQuery('[data-tm],[data-tampermonkey]') },
+      { id: 'dom_injected',   name: 'data-injected attribute',    fn: () => domQuery('[data-injected]') },
+      { id: 'dom_script_ext', name: 'Scripts from extension URLs',fn: () => domQueryScriptExt() },
+      { id: 'dom_shadow',     name: 'Open Shadow DOM elements',   fn: () => domShadowRoots() },
+      { id: 'dom_overlay',    name: 'Fixed-position overlays (z>9000)', fn: () => domHighZIndex() },
+      { id: 'dom_iframes',    name: 'Injected iframes',           fn: () => domInjectedIframes() },
+      { id: 'dom_ext_link',   name: 'Extension stylesheet links', fn: () => domExtLinks() },
+      { id: 'dom_panel',      name: 'Common panel IDs (#panel,#overlay,#ui-root)', fn: () => domQuery('#panel,#overlay,#ui-root,#tm-panel,#gm-panel,#script-ui') },
+    ]
+  },
+  {
+    id: 'window_props',
+    title: 'WINDOW PROPERTY POLLUTION',
+    tests: [
+      { id: 'win_tmobj',      name: 'window.tampermonkey',        fn: () => checkGlobal('tampermonkey') },
+      { id: 'win_scriptobj',  name: 'window.userScript',          fn: () => checkGlobal('userScript') },
+      { id: 'win_scriptmeta', name: 'window.__script__',          fn: () => checkGlobal('__script__') },
+      { id: 'win_tmloaded',   name: 'window.__tm_loaded',         fn: () => checkGlobal('__tm_loaded') },
+      { id: 'win_injected',   name: 'window.__injected',          fn: () => checkGlobal('__injected') },
+      { id: 'win_custom',     name: 'Non-standard globals (> 150 on clean page)', fn: () => windowPollution() },
+      { id: 'win_proxy',      name: 'window is a Proxy',          fn: () => isProxy(window) },
+      { id: 'win_defprop',    name: 'Object.defineProperty hooked', fn: () => isDefPropHooked() },
+      { id: 'win_objcreate',  name: 'Object.create hooked',       fn: () => isObjHooked('create') },
+      { id: 'win_symbol',     name: 'Symbol.toPrimitive on window',fn: () => checkSymbol() },
+    ]
+  },
+  {
+    id: 'network_hooks',
+    title: 'NETWORK & XHR HOOKS',
+    tests: [
+      { id: 'xhrmod',         name: 'XMLHttpRequest.prototype patched', fn: () => isXHRPatched() },
+      { id: 'fetchmod',       name: 'fetch() overridden',         fn: () => isFetchPatched() },
+      { id: 'wssmod',         name: 'WebSocket constructor patched', fn: () => isWSPatched() },
+      { id: 'navmod',         name: 'navigator.sendBeacon patched',fn: () => isNavBeaconPatched() },
+      { id: 'fakeAgent',      name: 'Suspicious userAgent string',fn: () => suspiciousUA() },
+      { id: 'xhropen_src',    name: 'XHR.open source is native',  fn: () => xhrOpenNative() },
+    ]
+  },
+  {
+    id: 'timing_perf',
+    title: 'TIMING & PERFORMANCE',
+    tests: [
+      { id: 'perf_long',      name: 'Long tasks on load (>100ms)',fn: () => perfLongTask() },
+      { id: 'settimeout_src', name: 'setTimeout source is native',fn: () => nativeCheck(setTimeout) },
+      { id: 'setinterval_src',name: 'setInterval source is native',fn: () => nativeCheck(setInterval) },
+      { id: 'raf_src',        name: 'requestAnimationFrame native',fn: () => nativeCheck(requestAnimationFrame) },
+      { id: 'date_src',       name: 'Date.now is native',         fn: () => nativeCheck(Date.now) },
+      { id: 'perf_src',       name: 'performance.now is native',  fn: () => nativeCheck(performance.now.bind(performance)) },
+    ]
+  },
+  {
+    id: 'storage',
+    title: 'STORAGE & COOKIES',
+    tests: [
+      { id: 'ls_tm_keys',     name: 'localStorage TM keys',       fn: () => lsKeys('tampermonkey','tm_','gm_','userscript') },
+      { id: 'ss_tm_keys',     name: 'sessionStorage TM keys',     fn: () => ssKeys('tampermonkey','tm_','gm_') },
+      { id: 'ls_proto',       name: 'localStorage.setItem patched',fn: () => isLSPatched() },
+      { id: 'cookie_src',     name: 'document.cookie is native descriptor', fn: () => cookieNative() },
+      { id: 'idb_tm',         name: 'IndexedDB TM databases',     fn: () => idbCheck() },
+    ]
+  },
+  {
+    id: 'console_events',
+    title: 'CONSOLE & EVENTS',
+    tests: [
+      { id: 'console_log',    name: 'console.log overridden',     fn: () => isConsolePatched('log') },
+      { id: 'console_warn',   name: 'console.warn overridden',    fn: () => isConsolePatched('warn') },
+      { id: 'console_error',  name: 'console.error overridden',   fn: () => isConsolePatched('error') },
+      { id: 'event_listeners',name: 'Extra document event listeners', fn: () => extraEventListeners() },
+      { id: 'mutation_obs',   name: 'Active MutationObservers',   fn: () => activeMutationObs() },
+      { id: 'custom_events',  name: 'TM custom events fired',     fn: () => customEventFired() },
+    ]
+  },
+  {
+    id: 'css_style',
+    title: 'CSS & STYLESHEET INJECTION',
+    tests: [
+      { id: 'style_tm',       name: 'Stylesheets with TM classes',fn: () => tmStylesheets() },
+      { id: 'style_ext',      name: 'Extension CSS URIs',         fn: () => extStyleURIs() },
+      { id: 'cssvars_tm',     name: 'CSS vars --tm-* on :root',   fn: () => tmCSSVars() },
+      { id: 'style_count',    name: 'Unusual stylesheet count (> 5)', fn: () => stylesheetCount() },
+      { id: 'inline_large',   name: 'Large inline <style> blocks',fn: () => largeInlineStyle() },
+    ]
+  },
+  {
+    id: 'stack_analysis',
+    title: 'STACK & CODE ANALYSIS',
+    tests: [
+      { id: 'error_stack',    name: 'Extension URL in Error stack',fn: () => extensionInStack() },
+      { id: 'fn_tostring',    name: 'Function.prototype.toString patched', fn: () => fnToStringPatched() },
+      { id: 'proto_chain',    name: 'Modified Function.prototype', fn: () => protoChainModified() },
+      { id: 'eval_patched',   name: 'eval() overridden',          fn: () => evalPatched() },
+      { id: 'json_parse',     name: 'JSON.parse overridden',      fn: () => nativeCheckInverse(JSON.parse) },
+      { id: 'json_stringify', name: 'JSON.stringify overridden',  fn: () => nativeCheckInverse(JSON.stringify) },
+    ]
+  },
+  {
+    id: 'document_meta',
+    title: 'DOCUMENT & META',
+    tests: [
+      { id: 'title_changed',  name: 'document.title modified by script', fn: () => titleModified() },
+      { id: 'body_class',     name: 'Injected classes on <body>', fn: () => bodyClassInjected() },
+      { id: 'html_attr',      name: 'Injected attrs on <html>',   fn: () => htmlAttrInjected() },
+      { id: 'meta_tm',        name: '<meta> tags with TM content',fn: () => domQuery('meta[name*="tampermonkey"],meta[name*="userscript"]') },
+      { id: 'doc_write',      name: 'document.write patched',     fn: () => nativeCheckInverse(document.write.bind(document)) },
+      { id: 'doc_referrer',   name: 'document.referrer tampered', fn: () => checkReferrer() },
+    ]
+  },
+];
 
-function detect() {
-  const results = document.getElementById('results');
-  results.innerHTML = '';
+// ─────────────────────────────────────────────
+//  DETECTION HELPER FUNCTIONS
+// ─────────────────────────────────────────────
 
-  let hits = 0;
-  let checks = 0;
-
-  function check(label, fn) {
-    checks++;
-    let ok = null;
-    let detail = '';
-    try {
-      const res = fn();
-      ok = !!res;
-      detail = String(res);
-    } catch (e) {
-      ok = null;
-      detail = e && e.message || 'error';
+function checkGlobal(name) {
+  try {
+    const v = window[name];
+    if (v !== undefined && v !== null) {
+      return { found: true, detail: `typeof = ${typeof v}` };
     }
-    if (ok === true) hits++;
-    addRow(results, label, ok, detail);
-  }
-
-  // === GM/TM API Detection ===
-  check('GM object', () => typeof window.GM === 'object');
-  check('GM_info', () => typeof window.GM_info === 'object');
-  check('GM_getValue', () => typeof window.GM_getValue === 'function');
-  check('GM_setValue', () => typeof window.GM_setValue === 'function');
-  check('unsafeWindow', () => typeof window.unsafeWindow !== 'undefined');
-  check('wrappedJSObject', () => typeof window.wrappedJSObject !== 'undefined');
-
-  // === Manager Objects ===
-  check('Tampermonkey object', () => typeof window.Tampermonkey !== 'undefined');
-  check('Violentmonkey object', () => typeof window.Violentmonkey !== 'undefined');
-  check('Greasemonkey object', () => typeof window.Greasemonkey !== 'undefined');
-
-  // === Script tags / headers ===
-  check('Userscript headers in scripts', () => {
-    const scripts = Array.from(document.scripts);
-    return scripts.some(s => /userscript|tampermonkey|greasemonkey|violentmonkey/i.test(s.src) || /==UserScript==/.test(s.textContent));
-  });
-
-  // === Prototype tampering ===
-  check('Function.toString tampered', () => {
-    const native = Function.prototype.toString.call(Function.prototype.toString);
-    return !/\[native code\]/.test(native);
-  });
-
-  // === postMessage hooks / stack traces ===
-  check('postMessage stack tampering', () => {
-    let detected = false;
-    const orig = window.postMessage;
-    try {
-      window.postMessage = new Proxy(orig, {
-        apply(t, th, args) {
-          const stack = new Error().stack || '';
-          if (/tampermonkey|greasemonkey|violentmonkey/i.test(stack)) detected = true;
-          return Reflect.apply(t, th, args);
-        }
-      });
-      window.postMessage('probe','*');
-    } catch {} finally { window.postMessage = orig; }
-    return detected;
-  });
-
-  // === DOM / EventTarget overrides ===
-  check('EventTarget prototype overrides', () => {
-    const orig = EventTarget.prototype.addEventListener;
-    let detected = false;
-    try {
-      EventTarget.prototype.addEventListener = new Proxy(orig, {
-        apply(t, th, args) { detected = true; return Reflect.apply(t, th, args); }
-      });
-      const e = new Event('test');
-      document.body.dispatchEvent(e);
-    } catch {} finally { EventTarget.prototype.addEventListener = orig; }
-    return detected;
-  });
-
-  // === Console tampering ===
-  check('console.log tampered', () => {
-    const native = console.log.toString();
-    return !/\[native code\]/.test(native);
-  });
-
-  // === Overall score ===
-  const overall = document.getElementById('overall');
-  if (hits === 0) {
-    overall.textContent = 'No userscript signals detected';
-    overall.className = 'status good';
-  } else if (hits < 5) {
-    overall.textContent = 'Possible userscript environment';
-    overall.className = 'status warn';
-  } else {
-    overall.textContent = 'Userscript manager likely active';
-    overall.className = 'status bad';
-  }
-
-  document.getElementById('ua').textContent = navigator.userAgent;
-  document.getElementById('time').textContent = new Date().toISOString();
-  document.getElementById('frame').textContent = (window.top === window.self) ? 'Top window' : 'Inside iframe';
+    return { found: false, detail: 'undefined' };
+  } catch(e) { return { found: false, detail: e.message }; }
 }
 
-detect();
-document.getElementById('rerun').addEventListener('click', detect);
+function domQuery(selector) {
+  try {
+    const els = document.querySelectorAll(selector);
+    if (els.length > 0) {
+      return { found: true, detail: `${els.length} element(s) matched: ${selector.slice(0,40)}` };
+    }
+    return { found: false, detail: 'no matches' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function domQueryScriptExt() {
+  const scripts = document.querySelectorAll('script[src]');
+  for (const s of scripts) {
+    const src = s.src || '';
+    if (src.startsWith('chrome-extension://') || src.startsWith('moz-extension://') || src.startsWith('safari-extension://')) {
+      return { found: true, detail: `Extension script: ${src.slice(0,60)}` };
+    }
+  }
+  return { found: false, detail: 'no extension scripts' };
+}
+
+function domShadowRoots() {
+  const all = document.querySelectorAll('*');
+  let count = 0;
+  for (const el of all) {
+    if (el.shadowRoot) count++;
+  }
+  if (count > 0) return { found: true, detail: `${count} open shadow root(s)` };
+  return { found: false, detail: 'none' };
+}
+
+function domHighZIndex() {
+  const all = document.querySelectorAll('*');
+  const found = [];
+  for (const el of all) {
+    const cs = getComputedStyle(el);
+    const z = parseInt(cs.zIndex);
+    if (cs.position === 'fixed' && z > 9000) {
+      found.push(`${el.tagName}#${el.id||'(no-id)'} z=${z}`);
+    }
+  }
+  if (found.length) return { found: true, detail: found.slice(0,3).join(', ') };
+  return { found: false, detail: 'none' };
+}
+
+function domInjectedIframes() {
+  const frames = document.querySelectorAll('iframe');
+  const suspicious = [];
+  for (const f of frames) {
+    const src = f.src || f.getAttribute('src') || '';
+    if (src.startsWith('chrome-extension://') || src.startsWith('moz-extension://') || src.includes('tampermonkey') || src === '' && !f.name) {
+      suspicious.push(src || '(blank)');
+    }
+  }
+  if (suspicious.length) return { found: true, detail: suspicious.slice(0,2).join(', ') };
+  return { found: false, detail: 'none' };
+}
+
+function domExtLinks() {
+  const links = document.querySelectorAll('link[rel="stylesheet"]');
+  for (const l of links) {
+    const href = l.href || '';
+    if (href.startsWith('chrome-extension://') || href.startsWith('moz-extension://')) {
+      return { found: true, detail: href.slice(0,60) };
+    }
+  }
+  return { found: false, detail: 'none' };
+}
+
+function windowPollution() {
+  // Count own enumerable properties on window
+  try {
+    const keys = Object.getOwnPropertyNames(window);
+    const baseline = 150;
+    if (keys.length > baseline) {
+      return { found: true, detail: `${keys.length} window props (baseline ~${baseline})` };
+    }
+    return { found: false, detail: `${keys.length} props` };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isProxy(obj) {
+  try {
+    // Proxies may leak via toString mismatches or Symbol.iterator
+    const tag = Object.prototype.toString.call(obj);
+    // Check if window is a Window
+    if (tag !== '[object Window]' && tag !== '[object global]') {
+      return { found: true, detail: `Object tag: ${tag}` };
+    }
+    return { found: false, detail: 'normal' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isDefPropHooked() {
+  try {
+    const src = Function.prototype.toString.call(Object.defineProperty);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: 'non-native source' };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isObjHooked(method) {
+  try {
+    const src = Function.prototype.toString.call(Object[method]);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: `Object.${method} non-native` };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function checkSymbol() {
+  try {
+    if (window[Symbol.toPrimitive] !== undefined) {
+      return { found: true, detail: 'Symbol.toPrimitive set on window' };
+    }
+    return { found: false, detail: 'not set' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isXHRPatched() {
+  try {
+    const src = Function.prototype.toString.call(XMLHttpRequest.prototype.open);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: 'XHR.open is wrapped' };
+    }
+    // Check if send is patched
+    const send = Function.prototype.toString.call(XMLHttpRequest.prototype.send);
+    if (!send.includes('[native code]')) {
+      return { found: true, detail: 'XHR.send is wrapped' };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isFetchPatched() {
+  try {
+    if (!window.fetch) return { found: false, detail: 'fetch not available' };
+    const src = Function.prototype.toString.call(window.fetch);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: 'fetch() is wrapped' };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isWSPatched() {
+  try {
+    if (!window.WebSocket) return { found: false, detail: 'no WebSocket' };
+    const src = Function.prototype.toString.call(WebSocket);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: 'WebSocket wrapped' };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isNavBeaconPatched() {
+  try {
+    if (!navigator.sendBeacon) return { found: false, detail: 'sendBeacon n/a' };
+    const src = Function.prototype.toString.call(navigator.sendBeacon);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: 'sendBeacon wrapped' };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function suspiciousUA() {
+  const ua = navigator.userAgent;
+  if (ua.includes('Tampermonkey') || ua.includes('Greasemonkey') || ua.includes('ViolentMonkey')) {
+    return { found: true, detail: ua.slice(0, 60) };
+  }
+  return { found: false, detail: 'clean' };
+}
+
+function xhrOpenNative() {
+  try {
+    const src = Function.prototype.toString.call(XMLHttpRequest.prototype.open);
+    if (src.includes('[native code]')) {
+      return { found: false, detail: 'native ✓' };
+    }
+    return { found: true, detail: 'non-native XHR.open' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function perfLongTask() {
+  try {
+    const entries = performance.getEntriesByType('longtask');
+    if (entries.length > 0) {
+      return { found: true, detail: `${entries.length} long task(s) detected` };
+    }
+    return { found: false, detail: 'none' };
+  } catch(e) {
+    // Try navigation timing
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (nav && nav.domContentLoadedEventEnd - nav.fetchStart > 300) {
+      return { found: true, detail: `slow load: ${Math.round(nav.domContentLoadedEventEnd - nav.fetchStart)}ms` };
+    }
+    return { found: false, detail: 'n/a' };
+  }
+}
+
+function nativeCheck(fn) {
+  try {
+    const src = Function.prototype.toString.call(fn);
+    if (!src.includes('[native code]')) {
+      return { found: true, detail: `non-native: ${fn.name}` };
+    }
+    return { found: false, detail: `native: ${fn.name}` };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function nativeCheckInverse(fn) {
+  return nativeCheck(fn); // "found" means patched
+}
+
+function lsKeys(...patterns) {
+  try {
+    const keys = Object.keys(localStorage);
+    const matches = keys.filter(k => patterns.some(p => k.toLowerCase().includes(p)));
+    if (matches.length) return { found: true, detail: `Keys: ${matches.slice(0,3).join(', ')}` };
+    return { found: false, detail: `${keys.length} keys, none matched` };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function ssKeys(...patterns) {
+  try {
+    const keys = Object.keys(sessionStorage);
+    const matches = keys.filter(k => patterns.some(p => k.toLowerCase().includes(p)));
+    if (matches.length) return { found: true, detail: `Keys: ${matches.slice(0,3).join(', ')}` };
+    return { found: false, detail: `${keys.length} keys, none matched` };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function isLSPatched() {
+  try {
+    const src = Function.prototype.toString.call(Storage.prototype.setItem);
+    if (!src.includes('[native code]')) return { found: true, detail: 'setItem wrapped' };
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function cookieNative() {
+  try {
+    const desc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
+               || Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+    if (!desc) return { found: true, detail: 'descriptor missing' };
+    const getStr = Function.prototype.toString.call(desc.get);
+    if (!getStr.includes('[native code]')) return { found: true, detail: 'cookie.get wrapped' };
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function idbCheck() {
+  return new Promise(resolve => {
+    try {
+      const req = indexedDB.databases ? indexedDB.databases() : null;
+      if (req) {
+        req.then(dbs => {
+          const tm = dbs.filter(d => d.name && (d.name.toLowerCase().includes('tampermonkey') || d.name.toLowerCase().includes('greasemonkey') || d.name.toLowerCase().includes('violentmonkey')));
+          if (tm.length) resolve({ found: true, detail: `DB: ${tm.map(d=>d.name).join(', ')}` });
+          else resolve({ found: false, detail: `${dbs.length} DB(s), none matched` });
+        }).catch(() => resolve({ found: false, detail: 'no access' }));
+      } else {
+        resolve({ found: false, detail: 'databases() n/a' });
+      }
+    } catch(e) { resolve({ found: false, detail: e.message }); }
+  });
+}
+
+function isConsolePatched(method) {
+  try {
+    const src = Function.prototype.toString.call(console[method]);
+    if (!src.includes('[native code]')) return { found: true, detail: `console.${method} wrapped` };
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function extraEventListeners() {
+  // We can't enumerate event listeners in the DOM, but we can check for
+  // getEventListeners in dev tools context or check specific events
+  try {
+    if (typeof getEventListeners === 'function') {
+      const docListeners = getEventListeners(document);
+      const keys = Object.keys(docListeners);
+      if (keys.length > 4) {
+        return { found: true, detail: `${keys.length} event types on document` };
+      }
+    }
+    return { found: false, detail: 'cannot enumerate (no devtools)' };
+  } catch(e) { return { found: false, detail: 'not accessible' }; }
+}
+
+function activeMutationObs() {
+  // Indirect: if MutationObserver is patched
+  try {
+    const src = Function.prototype.toString.call(MutationObserver);
+    if (!src.includes('[native code]')) return { found: true, detail: 'MutationObserver wrapped' };
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function customEventFired() {
+  return new Promise(resolve => {
+    let fired = false;
+    const handler = (e) => {
+      fired = true;
+      resolve({ found: true, detail: `Custom event: ${e.type}` });
+    };
+    ['tm-ready','gm-ready','userscript-loaded','script-ready'].forEach(ev => {
+      document.addEventListener(ev, handler, { once: true });
+      window.addEventListener(ev, handler, { once: true });
+    });
+    setTimeout(() => {
+      if (!fired) resolve({ found: false, detail: 'no TM events in 500ms' });
+    }, 500);
+  });
+}
+
+function tmStylesheets() {
+  try {
+    for (const sheet of document.styleSheets) {
+      try {
+        const rules = Array.from(sheet.cssRules || []);
+        const text = rules.map(r => r.cssText || '').join(' ');
+        if (text.includes('tm-') || text.includes('gm-') || text.includes('tampermonkey')) {
+          return { found: true, detail: `TM classes in stylesheet` };
+        }
+      } catch(e) { /* cross-origin */ }
+    }
+    return { found: false, detail: 'none' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function extStyleURIs() {
+  try {
+    for (const sheet of document.styleSheets) {
+      const href = sheet.href || '';
+      if (href.startsWith('chrome-extension://') || href.startsWith('moz-extension://')) {
+        return { found: true, detail: href.slice(0,60) };
+      }
+    }
+    return { found: false, detail: 'none' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function tmCSSVars() {
+  try {
+    const style = getComputedStyle(document.documentElement);
+    const names = ['--tm-', '--gm-', '--userscript-', '--tamper-'];
+    for (const n of names) {
+      // There's no standard way to enumerate CSS vars, but we can try known ones
+      const v = style.getPropertyValue(n + 'color') || style.getPropertyValue(n + 'bg') || style.getPropertyValue(n + 'version');
+      if (v && v.trim()) return { found: true, detail: `CSS var ${n}* set` };
+    }
+    return { found: false, detail: 'none' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function stylesheetCount() {
+  const count = document.styleSheets.length;
+  if (count > 5) return { found: true, detail: `${count} stylesheets (> 5)` };
+  return { found: false, detail: `${count} stylesheets` };
+}
+
+function largeInlineStyle() {
+  const styles = document.querySelectorAll('style');
+  for (const s of styles) {
+    if (s.textContent.length > 2000) {
+      return { found: true, detail: `Inline style ${s.textContent.length} chars` };
+    }
+  }
+  return { found: false, detail: 'none large' };
+}
+
+function extensionInStack() {
+  try {
+    let stack = '';
+    try { throw new Error('probe'); } catch(e) { stack = e.stack || ''; }
+    if (stack.includes('chrome-extension://') || stack.includes('moz-extension://')) {
+      return { found: true, detail: 'Extension URL in stack trace' };
+    }
+    return { found: false, detail: 'clean stack' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function fnToStringPatched() {
+  try {
+    // Check if toString itself is patched
+    const toStr = Function.prototype.toString;
+    const meta = Function.prototype.toString.call(toStr);
+    if (!meta.includes('[native code]')) {
+      return { found: true, detail: 'Function.prototype.toString is wrapped' };
+    }
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function protoChainModified() {
+  try {
+    const fnProto = Object.getPrototypeOf(function(){});
+    const expected = Function.prototype;
+    if (fnProto !== expected) {
+      return { found: true, detail: 'Function prototype chain modified' };
+    }
+    // Check for extra own properties
+    const extraProps = Object.getOwnPropertyNames(Function.prototype).filter(p => !['length','name','arguments','caller','constructor','apply','bind','call','toString'].includes(p));
+    if (extraProps.length > 0) {
+      return { found: true, detail: `Extra props on Function.prototype: ${extraProps.join(', ')}` };
+    }
+    return { found: false, detail: 'clean' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function evalPatched() {
+  try {
+    const src = Function.prototype.toString.call(eval);
+    if (!src.includes('[native code]')) return { found: true, detail: 'eval() wrapped' };
+    return { found: false, detail: 'native' };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function titleModified() {
+  // We can only check if current title looks injected
+  const title = document.title;
+  if (title.includes('[TM]') || title.includes('[GM]') || title.includes('[Script]')) {
+    return { found: true, detail: `Title: "${title}"` };
+  }
+  return { found: false, detail: `Title: "${title}"` };
+}
+
+function bodyClassInjected() {
+  try {
+    const classes = Array.from(document.body.classList);
+    const tmClasses = classes.filter(c => c.includes('tm-') || c.includes('gm-') || c.includes('userscript') || c.includes('tampermonkey'));
+    if (tmClasses.length) return { found: true, detail: tmClasses.join(', ') };
+    return { found: false, detail: `${classes.length} class(es)` };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function htmlAttrInjected() {
+  try {
+    const attrs = Array.from(document.documentElement.attributes);
+    const suspicious = attrs.filter(a => a.name.includes('tm-') || a.name.includes('gm-') || a.name.includes('tamper') || a.name.startsWith('data-script'));
+    if (suspicious.length) return { found: true, detail: suspicious.map(a => a.name+'='+a.value).join(', ') };
+    return { found: false, detail: `${attrs.length} attrs, none suspicious` };
+  } catch(e) { return { found: false, detail: e.message }; }
+}
+
+function checkReferrer() {
+  // If referrer has been tampered, it might be unusual
+  const ref = document.referrer;
+  if (ref.startsWith('chrome-extension://') || ref.startsWith('moz-extension://')) {
+    return { found: true, detail: `Referrer: ${ref.slice(0,50)}` };
+  }
+  return { found: false, detail: ref ? ref.slice(0,30) : 'empty' };
+}
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+const state = {
+  results: {},    // testId -> { found, detail, status }
+  running: false,
+  watchInterval: null,
+  startTime: null,
+  total: 0,
+  found: 0,
+  done: 0,
+};
+
+// ─────────────────────────────────────────────
+//  UI RENDERING
+// ─────────────────────────────────────────────
+function buildUI() {
+  const grid = document.getElementById('test-grid');
+  grid.innerHTML = '';
+  let total = 0;
+  CATEGORIES.forEach(cat => {
+    total += cat.tests.length;
+    const card = document.createElement('div');
+    card.className = 'category-card';
+    card.id = 'cat-' + cat.id;
+    card.innerHTML = `
+      <div class="category-header">
+        <span class="category-title">${cat.title}</span>
+        <span class="category-count" id="count-${cat.id}">0 / ${cat.tests.length}</span>
+      </div>
+      <div class="test-list" id="list-${cat.id}">
+        ${cat.tests.map(t => renderRow(t, 'pending')).join('')}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  document.getElementById('s-total').textContent = total;
+  state.total = total;
+}
+
+function renderRow(test, status, detail) {
+  const icon = status === 'pending' ? '<div class="test-icon icon-pending">?</div>'
+             : status === 'running' ? '<div class="test-icon icon-running">◌</div>'
+             : status === 'found'   ? '<div class="test-icon icon-found">✓</div>'
+             :                        '<div class="test-icon icon-clean">–</div>';
+  const detailClass = status === 'found' ? 'found' : 'notfound';
+  const detailText = detail ? `<div class="test-detail ${detailClass}">${escHtml(detail)}</div>` : '';
+  return `
+    <div class="test-row" id="row-${test.id}">
+      ${icon}
+      <div class="test-info">
+        <div class="test-name">${test.name}</div>
+        ${detailText}
+      </div>
+    </div>
+  `;
+}
+
+function updateRow(testId, status, detail) {
+  const row = document.getElementById('row-' + testId);
+  if (!row) return;
+  const icon = status === 'running' ? '<div class="test-icon icon-running">◌</div>'
+             : status === 'found'   ? '<div class="test-icon icon-found">✓</div>'
+             :                        '<div class="test-icon icon-clean">–</div>';
+  const detailClass = status === 'found' ? 'found' : 'notfound';
+  const test = CATEGORIES.flatMap(c => c.tests).find(t => t.id === testId);
+  row.innerHTML = `
+    ${icon}
+    <div class="test-info">
+      <div class="test-name">${test ? test.name : testId}</div>
+      ${detail ? `<div class="test-detail ${detailClass}">${escHtml(detail)}</div>` : ''}
+    </div>
+  `;
+}
+
+function updateCatCount(catId) {
+  const cat = CATEGORIES.find(c => c.id === catId);
+  if (!cat) return;
+  const foundCount = cat.tests.filter(t => state.results[t.id]?.found).length;
+  const el = document.getElementById('count-' + catId);
+  if (el) el.textContent = `${foundCount} / ${cat.tests.length}`;
+}
+
+function updateStats() {
+  const found = Object.values(state.results).filter(r => r.found).length;
+  const done  = Object.values(state.results).length;
+  state.found = found;
+  state.done  = done;
+  document.getElementById('s-found').textContent = found;
+  document.getElementById('s-clean').textContent = done - found;
+  const pct = done > 0 ? Math.round(found / done * 100) : 0;
+  document.getElementById('s-pct').textContent = done > 0 ? pct + '%' : '—';
+  // Verdict
+  const v = document.getElementById('verdict');
+  if (done < state.total) {
+    v.className = 'verdict waiting'; v.textContent = 'SCANNING...';
+  } else if (found === 0) {
+    v.className = 'verdict clean'; v.textContent = '✕ NOT DETECTED';
+  } else if (found >= 3) {
+    v.className = 'verdict detected'; v.textContent = '⚡ SCRIPT DETECTED';
+  } else {
+    v.className = 'verdict detected'; v.textContent = `⚠ ${found} SIGNAL${found>1?'S':''}`;
+  }
+  // Progress
+  const pBar = done / state.total * 100;
+  document.getElementById('prog-bar').style.width = pBar + '%';
+  document.getElementById('prog-pct').textContent = Math.round(pBar) + '%';
+  document.getElementById('prog-label').textContent = done < state.total ? `Running test ${done} / ${state.total}...` : `Scan complete — ${found} signal(s) found`;
+}
+
+// ─────────────────────────────────────────────
+//  SCAN ENGINE
+// ─────────────────────────────────────────────
+async function runScan() {
+  if (state.running) return;
+  state.running = true;
+  state.results = {};
+  state.startTime = performance.now();
+  document.getElementById('status-text').textContent = 'SCANNING';
+  document.getElementById('btn-scan').disabled = true;
+  buildUI();
+  updateStats();
+  log('info', `Scan started — ${state.total} tests queued`);
+
+  const allTests = CATEGORIES.flatMap(cat => cat.tests.map(t => ({ ...t, catId: cat.id })));
+  let count = 0;
+  const scanStart = Date.now();
+
+  for (const test of allTests) {
+    updateRow(test.id, 'running');
+    let result;
+    try {
+      const raw = test.fn();
+      result = raw instanceof Promise ? await raw : raw;
+    } catch(e) {
+      result = { found: false, detail: 'error: ' + e.message };
+    }
+    state.results[test.id] = result;
+    updateRow(test.id, result.found ? 'found' : 'clean', result.detail);
+    updateCatCount(test.catId);
+    count++;
+
+    const elapsed = Date.now() - scanStart;
+    document.getElementById('elapsed-text').textContent = elapsed + 'ms';
+    document.getElementById('cps-text').textContent = Math.round(count / (elapsed / 1000) || 0) + '/s';
+
+    if (result.found) {
+      log('found', `FOUND [${test.id}] ${test.name}: ${result.detail}`);
+    }
+    updateStats();
+
+    await sleep(8);
+  }
+
+  const total_ms = Math.round(performance.now() - state.startTime);
+  log('info', `Scan complete in ${total_ms}ms — ${state.found} signal(s) found out of ${state.total} tests`);
+  document.getElementById('status-text').textContent = 'COMPLETE';
+  document.getElementById('btn-scan').disabled = false;
+  state.running = false;
+}
+
+// ─────────────────────────────────────────────
+//  LIVE WATCH
+// ─────────────────────────────────────────────
+let watchActive = false;
+let watchMutObs = null;
+function startWatch() {
+  if (watchActive) { stopWatch(); return; }
+  watchActive = true;
+  document.getElementById('btn-watch').textContent = '◉ STOP LIVE WATCH';
+  document.getElementById('btn-watch').style.color = '#ff3e6c';
+  document.getElementById('btn-watch').style.borderColor = '#ff3e6c';
+  log('info', 'Live DOM watch started — monitoring for injections...');
+
+  // MutationObserver
+  watchMutObs = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1) {
+          const el = node;
+          const cls = el.className || '';
+          const id  = el.id || '';
+          if (cls.includes('tm-') || cls.includes('gm-') || id.includes('tm-') || id.includes('gm-')) {
+            log('found', `LIVE INJECT: <${el.tagName} class="${cls}" id="${id}">`);
+          }
+          const style = el.style?.cssText || '';
+          if (el.tagName === 'DIV' && parseInt(el.style?.zIndex) > 9000) {
+            log('found', `LIVE HIGH-Z: <${el.tagName} z-index=${el.style.zIndex}>`);
+          }
+        }
+      }
+      if (m.type === 'attributes') {
+        log('warn', `Attr changed: ${m.attributeName} on <${m.target.tagName}>`);
+      }
+    }
+  });
+
+  watchMutObs.observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ['class','id','style','data-tm','data-injected']
+  });
+
+  // Poll for GM API appearing
+  state.watchInterval = setInterval(() => {
+    const globals = ['GM_info','GM_setValue','GM_getValue','unsafeWindow','tampermonkey'];
+    for (const g of globals) {
+      if (window[g] !== undefined && !state.seenGlobals?.[g]) {
+        state.seenGlobals = state.seenGlobals || {};
+        state.seenGlobals[g] = true;
+        log('found', `LIVE GLOBAL: window.${g} appeared (${typeof window[g]})`);
+      }
+    }
+  }, 300);
+}
+
+function stopWatch() {
+  watchActive = false;
+  if (watchMutObs) { watchMutObs.disconnect(); watchMutObs = null; }
+  if (state.watchInterval) { clearInterval(state.watchInterval); state.watchInterval = null; }
+  document.getElementById('btn-watch').textContent = '◉ START LIVE WATCH';
+  document.getElementById('btn-watch').style.color = '';
+  document.getElementById('btn-watch').style.borderColor = '';
+  log('info', 'Live watch stopped.');
+}
+
+// ─────────────────────────────────────────────
+//  LOG
+// ─────────────────────────────────────────────
+function log(type, msg) {
+  const body = document.getElementById('log-body');
+  const now = new Date();
+  const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}.${now.getMilliseconds().toString().padStart(3,'0')}`;
+  const span = document.createElement('span');
+  span.className = 'log-line';
+  const cls = type === 'found' ? 'msg-found' : type === 'warn' ? 'msg-warn' : type === 'err' ? 'msg-err' : 'msg-info';
+  span.innerHTML = `<span class="ts">[${ts}]</span><span class="${cls}">${escHtml(msg)}</span>`;
+  body.appendChild(span);
+  body.scrollTop = body.scrollHeight;
+}
+
+// ─────────────────────────────────────────────
+//  UTILS
+// ─────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+buildUI();
+updateStats();
+log('info', 'Detector ready. Click RUN FULL SCAN to begin.');
+
+document.getElementById('btn-scan').addEventListener('click', runScan);
+document.getElementById('btn-watch').addEventListener('click', () => watchActive ? stopWatch() : startWatch());
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (state.running) return;
+  stopWatch();
+  state.results = {};
+  buildUI();
+  updateStats();
+  document.getElementById('status-text').textContent = 'READY';
+  document.getElementById('elapsed-text').textContent = '0ms';
+  document.getElementById('cps-text').textContent = '—';
+  document.getElementById('verdict').className = 'verdict waiting';
+  document.getElementById('verdict').textContent = 'AWAITING SCAN';
+  document.getElementById('log-body').innerHTML = '';
+  log('info', 'Reset complete.');
+});
 </script>
 </body>
 </html>
