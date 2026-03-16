@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Userscript Environment Detector</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #111827;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --good: #10b981;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(180deg, #0b1220, var(--bg));
+    color: var(--text);
+  }
+  .wrap {
+    max-width: 900px;
+    margin: 48px auto;
+    padding: 0 20px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    letter-spacing: .3px;
+  }
+  p.lead {
+    color: var(--muted);
+    margin-top: 0;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 18px;
+    margin: 16px 0;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .row:last-child { border-bottom: 0; }
+  .label { color: var(--muted); }
+  .status {
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .good { color: var(--good); border-color: rgba(16,185,129,.35); }
+  .warn { color: var(--warn); border-color: rgba(245,158,11,.35); }
+  .bad  { color: var(--bad);  border-color: rgba(239,68,68,.35); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  button {
+    background: #1f2937;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover { background: #243041; }
+  footer {
+    margin-top: 28px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Userscript Environment Detector</h1>
+    <p class="lead">Checks for common signals that a userscript manager or injected userscript is active.</p>
+
+    <div class="card">
+      <div class="row"><div class="label">Overall Result</div><div id="overall" class="status warn">Checking…</div></div>
+    </div>
+
+    <div class="card" id="results"></div>
+
+    <div class="card">
+      <div class="row"><div class="label">User Agent</div><div id="ua" class="mono"></div></div>
+      <div class="row"><div class="label">Time</div><div id="time" class="mono"></div></div>
+      <div class="row"><div class="label">Frame Context</div><div id="frame" class="mono"></div></div>
+    </div>
+
+    <div class="card">
+      <button id="rerun">Re-run Detection</button>
+    </div>
+
+    <footer>
+      Heuristic detection only. Advanced setups may hide these signals.
+    </footer>
+  </div>
+
+<script>
+function addRow(container, label, ok, detail) {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const l = document.createElement('div');
+  l.className = 'label';
+  l.textContent = label;
+
+  const r = document.createElement('div');
+  r.className = 'status ' + (ok === true ? 'bad' : ok === false ? 'good' : 'warn');
+  r.textContent = ok === true ? 'Detected' : ok === false ? 'Not detected' : 'Unknown';
+  if (detail) r.title = detail;
+
+  row.appendChild(l);
+  row.appendChild(r);
+  container.appendChild(row);
+}
+
+function detect() {
+  const results = document.getElementById('results');
+  results.innerHTML = '';
+
+  let hits = 0;
+  let checks = 0;
+
+  function check(label, fn) {
+    checks++;
+    let ok = null;
+    let detail = '';
+    try {
+      const res = fn();
+      ok = !!res;
+      detail = String(res);
+    } catch (e) {
+      ok = null;
+      detail = e && e.message || 'error';
+    }
+    if (ok === true) hits++;
+    addRow(results, label, ok, detail);
+  }
+
+  // === Direct API objects ===
+  check('GM object present', () => typeof window.GM === 'object');
+  check('GM_info present', () => typeof window.GM_info === 'object');
+  check('GM_getValue function', () => typeof window.GM_getValue === 'function');
+  check('GM_setValue function', () => typeof window.GM_setValue === 'function');
+
+  // === Common globals injected by managers ===
+  check('unsafeWindow reference', () => typeof window.unsafeWindow !== 'undefined');
+  check('wrappedJSObject (Firefox style)', () => typeof window.wrappedJSObject !== 'undefined');
+
+  // === Manager fingerprints ===
+  check('Tampermonkey object', () => typeof window.Tampermonkey !== 'undefined');
+  check('Violentmonkey object', () => typeof window.Violentmonkey !== 'undefined');
+
+  // === Script tag inspection ===
+  check('Userscript-like script tags', () => {
+    const scripts = Array.from(document.scripts);
+    return scripts.some(s =>
+      /userscript|tampermonkey|greasemonkey|violentmonkey/i.test(s.src) ||
+      /==UserScript==/.test(s.textContent)
+    );
+  });
+
+  // === Event / sandbox clues ===
+  check('Prototype tampering (Function.toString)', () => {
+    const native = Function.prototype.toString.call(Function.prototype.toString);
+    return !/\[native code\]/.test(native);
+  });
+
+  check('postMessage channel listeners (heuristic)', () => {
+    let detected = false;
+    const orig = window.postMessage;
+    try {
+      window.postMessage = new Proxy(orig, {
+        apply(t, th, args) {
+          const stack = new Error().stack || '';
+          if (/tampermonkey|greasemonkey|violentmonkey/i.test(stack)) detected = true;
+          return Reflect.apply(t, th, args);
+        }
+      });
+      window.postMessage('probe','*');
+    } catch {}
+    finally { window.postMessage = orig; }
+    return detected;
+  });
+
+  // === Score ===
+  const overall = document.getElementById('overall');
+  if (hits === 0) {
+    overall.textContent = 'No userscript signals detected';
+    overall.className = 'status good';
+  } else if (hits < 3) {
+    overall.textContent = 'Possible userscript environment';
+    overall.className = 'status warn';
+  } else {
+    overall.textContent = 'Userscript manager likely active';
+    overall.className = 'status bad';
+  }
+
+  document.getElementById('ua').textContent = navigator.userAgent;
+  document.getElementById('time').textContent = new Date().toISOString();
+  document.getElementById('frame').textContent = (window.top === window.self) ? 'Top window' : 'Inside iframe';
+}
+
+// Run
+detect();
+document.getElementById('rerun').addEventListener('click', detect);
+</script>
+</body>
+</html>
