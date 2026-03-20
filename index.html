@@ -5,7 +5,118 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TM Detector</title>
 <script>
-// Install interceptors IMMEDIATELY before anything else
+// ─── BASELINE SNAPSHOTS (must run before any extension code) ─────
+(function() {
+  window.__BASELINE__ = {};
+  const snap = (ns, key, fn) => {
+    try { const v = fn(); window.__BASELINE__[ns+'.'+key] = v; } catch(e) {}
+  };
+
+  // Snapshot native toString of every function we care about
+  const fns = {
+    'console.log':   ()=>console.log,
+    'console.warn':  ()=>console.warn,
+    'console.error': ()=>console.error,
+    'console.info':  ()=>console.info,
+    'console.debug': ()=>console.debug,
+    'console.table': ()=>console.table,
+    'console.group': ()=>console.group,
+    'console.groupEnd':()=>console.groupEnd,
+    'console.clear': ()=>console.clear,
+    'console.time':  ()=>console.time,
+    'console.timeEnd':()=>console.timeEnd,
+    'console.count': ()=>console.count,
+    'console.trace': ()=>console.trace,
+    'window.fetch':       ()=>window.fetch,
+    'window.open':        ()=>window.open,
+    'window.close':       ()=>window.close,
+    'window.alert':       ()=>window.alert,
+    'window.confirm':     ()=>window.confirm,
+    'window.prompt':      ()=>window.prompt,
+    'window.postMessage': ()=>window.postMessage,
+    'window.setTimeout':  ()=>window.setTimeout,
+    'window.setInterval': ()=>window.setInterval,
+    'window.clearTimeout':()=>window.clearTimeout,
+    'window.clearInterval':()=>window.clearInterval,
+    'window.requestAnimationFrame':()=>window.requestAnimationFrame,
+    'window.eval':        ()=>window.eval,
+    'window.atob':        ()=>window.atob,
+    'window.btoa':        ()=>window.btoa,
+    'window.queueMicrotask':()=>window.queueMicrotask,
+    'window.performance.now':()=>performance.now,
+    'JSON.parse':         ()=>JSON.parse,
+    'JSON.stringify':     ()=>JSON.stringify,
+    'Object.defineProperty':()=>Object.defineProperty,
+    'Object.getOwnPropertyDescriptor':()=>Object.getOwnPropertyDescriptor,
+    'Object.assign':      ()=>Object.assign,
+    'Object.keys':        ()=>Object.keys,
+    'Object.freeze':      ()=>Object.freeze,
+    'Array.prototype.push':()=>Array.prototype.push,
+    'Array.prototype.pop': ()=>Array.prototype.pop,
+    'Array.prototype.splice':()=>Array.prototype.splice,
+    'Array.prototype.map': ()=>Array.prototype.map,
+    'Array.prototype.filter':()=>Array.prototype.filter,
+    'Array.prototype.forEach':()=>Array.prototype.forEach,
+    'Array.prototype.find':()=>Array.prototype.find,
+    'Array.prototype.indexOf':()=>Array.prototype.indexOf,
+    'Array.prototype.includes':()=>Array.prototype.includes,
+    'Array.prototype.join':()=>Array.prototype.join,
+    'Array.prototype.reduce':()=>Array.prototype.reduce,
+    'Array.prototype.slice':()=>Array.prototype.slice,
+    'Function.prototype.toString':()=>Function.prototype.toString,
+    'Function.prototype.call':()=>Function.prototype.call,
+    'Function.prototype.apply':()=>Function.prototype.apply,
+    'Function.prototype.bind':()=>Function.prototype.bind,
+    'String.prototype.replace':()=>String.prototype.replace,
+    'String.prototype.split':()=>String.prototype.split,
+    'String.prototype.indexOf':()=>String.prototype.indexOf,
+    'String.prototype.includes':()=>String.prototype.includes,
+    'String.prototype.trim':()=>String.prototype.trim,
+    'XMLHttpRequest.prototype.open':()=>XMLHttpRequest.prototype.open,
+    'XMLHttpRequest.prototype.send':()=>XMLHttpRequest.prototype.send,
+    'XMLHttpRequest.prototype.setRequestHeader':()=>XMLHttpRequest.prototype.setRequestHeader,
+    'Storage.prototype.setItem':()=>Storage.prototype.setItem,
+    'Storage.prototype.getItem':()=>Storage.prototype.getItem,
+    'Storage.prototype.removeItem':()=>Storage.prototype.removeItem,
+    'EventTarget.prototype.addEventListener':()=>EventTarget.prototype.addEventListener,
+    'EventTarget.prototype.removeEventListener':()=>EventTarget.prototype.removeEventListener,
+    'EventTarget.prototype.dispatchEvent':()=>EventTarget.prototype.dispatchEvent,
+    'Node.prototype.appendChild':()=>Node.prototype.appendChild,
+    'Node.prototype.removeChild':()=>Node.prototype.removeChild,
+    'Node.prototype.insertBefore':()=>Node.prototype.insertBefore,
+    'Element.prototype.setAttribute':()=>Element.prototype.setAttribute,
+    'Element.prototype.getAttribute':()=>Element.prototype.getAttribute,
+    'Element.prototype.querySelector':()=>Element.prototype.querySelector,
+    'Element.prototype.querySelectorAll':()=>Element.prototype.querySelectorAll,
+    'Document.prototype.createElement':()=>document.createElement,
+    'Document.prototype.getElementById':()=>document.getElementById,
+    'Document.prototype.querySelector':()=>document.querySelector,
+    'MutationObserver':   ()=>window.MutationObserver,
+    'IntersectionObserver':()=>window.IntersectionObserver,
+    'Promise.then':       ()=>Promise.prototype.then,
+    'Promise.catch':      ()=>Promise.prototype.catch,
+    'Symbol.hasInstance': ()=>Symbol,
+    'Proxy':              ()=>window.Proxy,
+    'Reflect.apply':      ()=>Reflect && Reflect.apply,
+  };
+
+  for (const [key, fn] of Object.entries(fns)) {
+    try {
+      const v = fn();
+      if (v == null) { window.__BASELINE__[key] = '__null__'; continue; }
+      window.__BASELINE__[key] = {
+        ref: v,
+        str: Function.prototype.toString.call(v),
+        isNative: Function.prototype.toString.call(v).includes('[native code]')
+      };
+    } catch(e) {
+      window.__BASELINE__[key] = '__error__';
+    }
+  }
+  window.__BASELINE__['__taken__'] = performance.now();
+})();
+
+// ─── INTERCEPTOR LOGGING ─────────────────────────────────────────
 (function() {
   window.__LOG__ = [];
   const push = (type, msg, ext) => {
@@ -16,30 +127,19 @@
   };
   const safe = (v, n=120) => { try { if (v===undefined) return 'undefined'; if (v===null) return 'null'; if (typeof v==='function') return `[fn:${v.name||'?'}]`; const s = typeof v==='string'?v:JSON.stringify(v); return s.length>n?s.slice(0,n)+'…':s; } catch { return String(v); } };
   const isExt = () => { try { const s=new Error().stack||''; return s.includes('chrome-extension://')||s.includes('moz-extension://'); } catch{return false;} };
-
-  // Console
   const _con = {};
   ['log','warn','error','info','debug'].forEach(m => {
     _con[m] = console[m].bind(console);
-    console[m] = function(...a) {
-      push('console', `console.${m}(${a.map(x=>safe(x)).join(', ')})`, isExt());
-      return _con[m](...a);
-    };
+    console[m] = function(...a) { push('console', `console.${m}(${a.map(x=>safe(x)).join(', ')})`, isExt()); return _con[m](...a); };
   });
   window.__orig_console__ = _con;
-
-  // Fetch
   const _fetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
-    const url = typeof input==='string'?input:(input?.url||'?');
-    const method = init?.method||'GET';
+    const url = typeof input==='string'?input:(input?.url||'?'), method = init?.method||'GET';
     push('network', `fetch ${method} ${url}`, isExt());
     return _fetch(input, init).then(r => { push('network', `fetch ${r.status} ← ${url}`); return r; }).catch(e => { push('network', `fetch ERR ${url}: ${e.message}`); throw e; });
   };
-
-  // XHR
-  const _open = XMLHttpRequest.prototype.open;
-  const _send = XMLHttpRequest.prototype.send;
+  const _open = XMLHttpRequest.prototype.open, _send = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function(m, url) { this.__u__=url; this.__m__=m; return _open.apply(this,arguments); };
   XMLHttpRequest.prototype.send = function(body) {
     const u=this.__u__||'?', m=this.__m__||'?';
@@ -47,151 +147,126 @@
     this.addEventListener('load', () => push('network', `XHR ${this.status} ← ${u}`));
     return _send.apply(this,arguments);
   };
-
-  // localStorage / sessionStorage
-  const _lsSet = Storage.prototype.setItem;
-  const _lsGet = Storage.prototype.getItem;
+  const _lsSet = Storage.prototype.setItem, _lsGet = Storage.prototype.getItem;
   Storage.prototype.setItem = function(k,v) { push('storage', `${this===sessionStorage?'session':'local'}Storage.set("${safe(k,40)}", ${safe(v,60)})`, isExt()); return _lsSet.call(this,k,v); };
   Storage.prototype.getItem = function(k) { const v=_lsGet.call(this,k); push('storage', `${this===sessionStorage?'session':'local'}Storage.get("${safe(k,40)}") → ${safe(v,60)}`, isExt()); return v; };
-
-  // Cookie
   const cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype,'cookie') || Object.getOwnPropertyDescriptor(HTMLDocument.prototype,'cookie');
   if (cookieDesc) Object.defineProperty(document,'cookie',{ get(){return cookieDesc.get.call(this);}, set(v){push('storage',`document.cookie = ${safe(v,80)}`,isExt()); return cookieDesc.set.call(this,v);}, configurable:true });
-
-  // GM API traps
   ['GM_info','GM_setValue','GM_getValue','GM_xmlhttpRequest','GM_notification','GM_openInTab','GM_addStyle','GM_registerMenuCommand','GM_log','GM_download','GM_cookie','unsafeWindow','GM','exportFunction'].forEach(name => {
     let _v = window[name];
-    Object.defineProperty(window, name, {
-      get() { if(_v!==undefined) push('gm', `window.${name} accessed (${typeof _v})`); return _v; },
-      set(v) { push('gm', `window.${name} = ${safe(v,60)}`); _v=v; },
-      configurable:true
-    });
+    Object.defineProperty(window, name, { get() { if(_v!==undefined) push('gm', `window.${name} accessed (${typeof _v})`); return _v; }, set(v) { push('gm', `window.${name} = ${safe(v,60)}`); _v=v; }, configurable:true });
   });
-
-  // setTimeout / setInterval
   const _sto = window.setTimeout, _siv = window.setInterval;
   window.setTimeout = function(fn, delay, ...a) { push('timers', `setTimeout(delay=${delay}, fn=${safe(fn,60)})`, isExt()); return _sto.call(window,fn,delay,...a); };
   window.setInterval = function(fn, delay, ...a) { push('timers', `setInterval(delay=${delay}, fn=${safe(fn,60)})`, isExt()); return _siv.call(window,fn,delay,...a); };
-
-  // addEventListener
   const _ae = EventTarget.prototype.addEventListener;
   EventTarget.prototype.addEventListener = function(type, fn, opts) {
     const target = this===window?'window':this===document?'document':(this.tagName?`<${this.tagName.toLowerCase()}>`:'?');
     push('events', `${target}.on("${type}", ${typeof fn==='function'?fn.name||'anon':'?'})`, isExt());
     return _ae.call(this,type,fn,opts);
   };
-
-  // createElement / appendChild
   const _ce = document.createElement.bind(document);
   document.createElement = function(tag,...a) {
     const ext = isExt();
     if (ext || ['script','iframe','link'].includes(tag.toLowerCase())) push('dom', `createElement(${tag.toUpperCase()})`, ext);
     return _ce(tag,...a);
   };
-
-  // History
   const _ps = history.pushState.bind(history), _rs = history.replaceState.bind(history);
   history.pushState = function(s,t,url) { push('nav', `pushState → ${url}`); return _ps(s,t,url); };
   history.replaceState = function(s,t,url) { push('nav', `replaceState → ${url}`); return _rs(s,t,url); };
-
-  // eval
   const _eval = window.eval;
   window.eval = function(code) { push('eval', `eval(${safe(code,80)})`); return _eval(code); };
   Object.defineProperty(window.eval,'toString',{value:()=>'function eval() { [native code] }'});
-
 })();
 </script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700&display=swap');
 :root {
-  --bg: #030508; --panel: #07111a; --border: #102030;
-  --cyan: #00e5ff; --green: #39ff14; --red: #ff3e6c; --warn: #ffaa00; --dim: #3a5568; --text: #9fc8d8;
+  --bg:#030508;--panel:#07111a;--border:#102030;
+  --cyan:#00e5ff;--green:#39ff14;--red:#ff3e6c;--warn:#ffaa00;--dim:#3a5568;--text:#9fc8d8;--mag:#df87ff;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: 'Share Tech Mono', monospace; font-size: 12px; padding: 16px; }
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;padding:16px}
+h1{font-family:'Orbitron';font-size:18px;color:var(--cyan);text-shadow:0 0 14px var(--cyan);letter-spacing:.1em;margin-bottom:4px}
+.sub{color:var(--dim);font-size:10px;letter-spacing:.3em;margin-bottom:14px}
+.top{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.btn{font-family:'Share Tech Mono';font-size:11px;padding:7px 14px;border:1px solid;background:transparent;cursor:pointer;letter-spacing:.06em;text-transform:uppercase;transition:all .15s}
+.btn-c{color:var(--cyan);border-color:var(--cyan)}.btn-c:hover{background:rgba(0,229,255,.08)}
+.btn-g{color:var(--green);border-color:var(--green)}.btn-g:hover{background:rgba(57,255,20,.08)}
+.btn-r{color:var(--red);border-color:var(--red)}.btn-r:hover{background:rgba(255,62,108,.08)}
+.verdict{font-family:'Orbitron';font-size:13px;padding:6px 16px;border:2px solid;letter-spacing:.08em}
+.v-wait{color:var(--warn);border-color:var(--warn)}
+.v-hit{color:var(--red);border-color:var(--red);text-shadow:0 0 8px var(--red);animation:gp .9s infinite}
+.v-miss{color:var(--green);border-color:var(--green);text-shadow:0 0 8px var(--green)}
+@keyframes gp{0%,100%{box-shadow:0 0 4px var(--red)}50%{box-shadow:0 0 18px var(--red)}}
+.layout{display:grid;grid-template-columns:1fr 420px;gap:12px}
+@media(max-width:960px){.layout{grid-template-columns:1fr}}
+.checks{display:flex;flex-direction:column;gap:8px}
+.section{background:var(--panel);border:1px solid var(--border)}
+.sec-head{display:flex;justify-content:space-between;align-items:center;padding:7px 11px;border-bottom:1px solid var(--border);background:rgba(0,229,255,.03)}
+.sec-title{font-family:'Orbitron';font-size:9px;color:var(--cyan);letter-spacing:.12em}
+.sec-ct{font-size:10px;color:var(--dim)}
+.sec-head.warn-sec .sec-title{color:var(--red)}
+.rows{padding:4px 0}
+.row{display:flex;align-items:center;gap:8px;padding:4px 11px;border-bottom:1px solid rgba(16,32,48,.5)}
+.row:last-child{border-bottom:none}
+.row.overwrite-hit{background:rgba(255,62,108,.06);border-left:2px solid var(--red)}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-p{background:var(--warn)}.dot-h{background:var(--red);box-shadow:0 0 6px var(--red)}
+.dot-hg{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot-m{background:var(--dim)}.dot-r{background:var(--cyan);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rname{flex:1;color:var(--text)}
+.rdetail{font-size:10px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rdetail.h{color:var(--red)}.rdetail.hg{color:var(--green)}.rdetail.m{color:var(--dim)}.rdetail.warn{color:var(--warn)}
+/* severity badges */
+.badge{font-size:8px;padding:1px 5px;border:1px solid;letter-spacing:.04em;flex-shrink:0}
+.badge-crit{color:var(--red);border-color:var(--red);background:rgba(255,62,108,.08)}
+.badge-warn{color:var(--warn);border-color:var(--warn);background:rgba(255,170,0,.08)}
+.badge-info{color:var(--cyan);border-color:var(--cyan);background:rgba(0,229,255,.05)}
 
-h1 { font-family: 'Orbitron'; font-size: 18px; color: var(--cyan); text-shadow: 0 0 14px var(--cyan); letter-spacing: .1em; margin-bottom: 4px; }
-.sub { color: var(--dim); font-size: 10px; letter-spacing: .3em; margin-bottom: 14px; }
+/* summary strip */
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.sum-box{background:var(--panel);border:1px solid var(--border);padding:6px 14px;text-align:center;min-width:90px}
+.sum-num{font-family:'Orbitron';font-size:20px}
+.sum-lbl{font-size:9px;color:var(--dim);letter-spacing:.1em;margin-top:2px}
+.sum-num.red{color:var(--red);text-shadow:0 0 10px var(--red)}
+.sum-num.green{color:var(--green)}.sum-num.warn{color:var(--warn)}
 
-/* top row */
-.top { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-.btn { font-family: 'Share Tech Mono'; font-size: 11px; padding: 7px 14px; border: 1px solid; background: transparent; cursor: pointer; letter-spacing: .06em; text-transform: uppercase; transition: all .15s; }
-.btn-c { color: var(--cyan); border-color: var(--cyan); } .btn-c:hover { background: rgba(0,229,255,.08); }
-.btn-g { color: var(--green); border-color: var(--green); } .btn-g:hover { background: rgba(57,255,20,.08); }
-.btn-r { color: var(--red); border-color: var(--red); } .btn-r:hover { background: rgba(255,62,108,.08); }
-.verdict { font-family: 'Orbitron'; font-size: 13px; padding: 6px 16px; border: 2px solid; letter-spacing: .08em; }
-.v-wait { color: var(--warn); border-color: var(--warn); }
-.v-hit  { color: var(--green); border-color: var(--green); text-shadow: 0 0 8px var(--green); animation: gp .9s infinite; }
-.v-miss { color: var(--dim); border-color: var(--dim); }
-@keyframes gp { 0%,100%{box-shadow:0 0 4px var(--green)} 50%{box-shadow:0 0 14px var(--green)} }
-
-/* layout */
-.layout { display: grid; grid-template-columns: 1fr 400px; gap: 12px; }
-@media(max-width:900px){ .layout{ grid-template-columns:1fr; } }
-
-/* checks */
-.checks { display: flex; flex-direction: column; gap: 8px; }
-.section { background: var(--panel); border: 1px solid var(--border); }
-.sec-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 11px; border-bottom: 1px solid var(--border); background: rgba(0,229,255,.03); }
-.sec-title { font-family: 'Orbitron'; font-size: 9px; color: var(--cyan); letter-spacing: .12em; }
-.sec-ct { font-size: 10px; color: var(--dim); }
-.rows { padding: 4px 0; }
-.row { display: flex; align-items: center; gap: 8px; padding: 4px 11px; border-bottom: 1px solid rgba(16,32,48,.5); }
-.row:last-child { border-bottom: none; }
-.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.dot-p { background: var(--warn); }
-.dot-h { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.dot-m { background: var(--dim); }
-.dot-r { background: var(--cyan); animation: spin .8s linear infinite; }
-@keyframes spin { to{transform:rotate(360deg)} }
-.rname { flex:1; color: var(--text); }
-.rdetail { font-size: 10px; max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rdetail.h { color: var(--green); }
-.rdetail.m { color: var(--dim); }
-
-/* interceptor panel */
-.int-panel { background: var(--panel); border: 1px solid var(--border); border-left: 2px solid var(--red); display: flex; flex-direction: column; max-height: 680px; position: sticky; top: 10px; }
-.int-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.int-title { font-family: 'Orbitron'; font-size: 9px; color: var(--red); letter-spacing: .12em; }
-.tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.tab { font-size: 9px; padding: 3px 8px; border: 1px solid var(--border); background: transparent; color: var(--dim); cursor: pointer; font-family: 'Share Tech Mono'; transition: all .12s; }
-.tab:hover { color: var(--text); }
-.tab.on { color: var(--red); border-color: var(--red); background: rgba(255,62,108,.05); }
-.tab .ct { margin-left: 4px; font-size: 8px; background: var(--dim); color: #000; padding: 0 3px; border-radius: 8px; }
-.tab.on .ct { background: var(--red); }
-.feeds { flex: 1; overflow: hidden; min-height: 0; }
-.feed { display: none; height: 100%; overflow-y: auto; padding: 4px 0; }
-.feed.on { display: block; }
-.feed::-webkit-scrollbar { width: 3px; }
-.feed::-webkit-scrollbar-thumb { background: var(--border); }
-.frow { display: grid; grid-template-columns: 50px 1fr; padding: 3px 10px; border-bottom: 1px solid rgba(16,32,48,.5); animation: fi .15s; }
-@keyframes fi { from{opacity:0;transform:translateX(-3px)} to{opacity:1;transform:none} }
-.frow.ext { border-left: 2px solid var(--red); background: rgba(255,62,108,.04); }
-.fts { color: var(--dim); font-size: 9px; padding-top: 1px; }
-.fmsg { word-break: break-all; font-size: 10.5px; }
-.fmsg.console { color: var(--text); }
-.fmsg.console.warn { color: var(--warn); }
-.fmsg.console.error { color: var(--red); }
-.fmsg.network { color: var(--cyan); }
-.fmsg.storage { color: #88ffcc; }
-.fmsg.gm { color: #ff88ff; }
-.fmsg.timers { color: #aaffaa; }
-.fmsg.events { color: #aaaaff; }
-.fmsg.dom { color: #ffdd88; }
-.fmsg.nav { color: #88ccff; }
-.fmsg.eval { color: var(--red); }
-.int-bottom { display: flex; gap: 6px; padding: 6px 9px; border-top: 1px solid var(--border); flex-shrink: 0; }
-.int-search { background: transparent; border: 1px solid var(--border); color: var(--text); font-family: 'Share Tech Mono'; font-size: 10px; padding: 3px 7px; flex:1; outline: none; }
-.int-search:focus { border-color: var(--red); }
-.int-search::placeholder { color: var(--dim); }
-.int-ct { font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
-.int-ct span { color: var(--cyan); font-weight: bold; }
+/* intercept panel */
+.int-panel{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--red);display:flex;flex-direction:column;max-height:740px;position:sticky;top:10px}
+.int-head{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;border-bottom:1px solid var(--border);flex-shrink:0}
+.int-title{font-family:'Orbitron';font-size:9px;color:var(--red);letter-spacing:.12em}
+.tabs{display:flex;flex-wrap:wrap;gap:2px;padding:6px 8px 0;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{font-size:9px;padding:3px 8px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;font-family:'Share Tech Mono';transition:all .12s}
+.tab:hover{color:var(--text)}.tab.on{color:var(--red);border-color:var(--red);background:rgba(255,62,108,.05)}
+.tab .ct{margin-left:4px;font-size:8px;background:var(--dim);color:#000;padding:0 3px;border-radius:8px}
+.tab.on .ct{background:var(--red)}
+.feeds{flex:1;overflow:hidden;min-height:0}
+.feed{display:none;height:100%;overflow-y:auto;padding:4px 0}
+.feed.on{display:block}
+.feed::-webkit-scrollbar{width:3px}
+.feed::-webkit-scrollbar-thumb{background:var(--border)}
+.frow{display:grid;grid-template-columns:50px 1fr;padding:3px 10px;border-bottom:1px solid rgba(16,32,48,.5);animation:fi .15s}
+@keyframes fi{from{opacity:0;transform:translateX(-3px)}to{opacity:1;transform:none}}
+.frow.ext{border-left:2px solid var(--red);background:rgba(255,62,108,.04)}
+.fts{color:var(--dim);font-size:9px;padding-top:1px}
+.fmsg{word-break:break-all;font-size:10.5px}
+.fmsg.console{color:var(--text)}.fmsg.console.warn{color:var(--warn)}.fmsg.console.error{color:var(--red)}
+.fmsg.network{color:var(--cyan)}.fmsg.storage{color:#88ffcc}.fmsg.gm{color:#ff88ff}
+.fmsg.timers{color:#aaffaa}.fmsg.events{color:#aaaaff}.fmsg.dom{color:#ffdd88}
+.fmsg.nav{color:#88ccff}.fmsg.eval{color:var(--red)}.fmsg.overwrite{color:var(--red)}
+.int-bottom{display:flex;gap:6px;padding:6px 9px;border-top:1px solid var(--border);flex-shrink:0}
+.int-search{background:transparent;border:1px solid var(--border);color:var(--text);font-family:'Share Tech Mono';font-size:10px;padding:3px 7px;flex:1;outline:none}
+.int-search:focus{border-color:var(--red)}.int-search::placeholder{color:var(--dim)}
+.int-ct{font-size:10px;color:var(--dim);display:flex;align-items:center;gap:4px}
+.int-ct span{color:var(--cyan);font-weight:bold}
 </style>
 </head>
 <body>
 
 <h1>◈ TM DETECTOR</h1>
-<div class="sub">ACTIVE INTERCEPTORS + FINGERPRINT SCAN — v5.1</div>
+<div class="sub">ACTIVE INTERCEPTORS · FINGERPRINT SCAN · OVERWRITE ANALYSIS — v6.0</div>
 
 <div class="top">
   <button class="btn btn-c" id="btn-scan">▶ SCAN</button>
@@ -201,11 +276,20 @@ h1 { font-family: 'Orbitron'; font-size: 18px; color: var(--cyan); text-shadow: 
   <div style="margin-left:auto;color:var(--dim);font-size:10px;" id="status-text">ready</div>
 </div>
 
-<div class="layout">
-  <!-- LEFT: checks -->
-  <div class="checks" id="checks"></div>
+<!-- Summary counters -->
+<div class="summary" id="summary" style="display:none">
+  <div class="sum-box"><div class="sum-num red" id="s-crit">0</div><div class="sum-lbl">CRITICAL</div></div>
+  <div class="sum-box"><div class="sum-num warn" id="s-warn">0</div><div class="sum-lbl">WARNINGS</div></div>
+  <div class="sum-box"><div class="sum-num green" id="s-clean">0</div><div class="sum-lbl">CLEAN</div></div>
+  <div class="sum-box"><div class="sum-num" id="s-total" style="color:var(--text)">0</div><div class="sum-lbl">TOTAL CHECKS</div></div>
+  <div class="sum-box" style="flex:1;text-align:left;padding:6px 14px">
+    <div style="font-size:9px;color:var(--dim);letter-spacing:.1em;margin-bottom:4px">BASELINE TAKEN</div>
+    <div id="s-baseline" style="font-size:10px;color:var(--warn)">—</div>
+  </div>
+</div>
 
-  <!-- RIGHT: interceptor feed -->
+<div class="layout">
+  <div class="checks" id="checks"></div>
   <div class="int-panel">
     <div class="int-head">
       <div class="int-title">⬡ LIVE INTERCEPT FEED</div>
@@ -221,8 +305,142 @@ h1 { font-family: 'Orbitron'; font-size: 18px; color: var(--cyan); text-shadow: 
 </div>
 
 <script>
-// ─── TEST DEFINITIONS ───────────────────────────────────────────
+// ─── OVERWRITE DETECTION HELPERS ────────────────────────────────
+function checkOverwrite(key) {
+  const base = window.__BASELINE__[key];
+  if (!base || base === '__null__' || base === '__error__') return { found: false, detail: 'no baseline', severity: 'info' };
+
+  let current, currentStr, currentIsNative;
+  try {
+    const parts = key.split('.');
+    let obj = window;
+
+    // Special resolution paths
+    if (key.startsWith('console.')) { obj = console; current = console[parts[1]]; }
+    else if (key.startsWith('Array.prototype.')) { current = Array.prototype[parts[2]]; }
+    else if (key.startsWith('Function.prototype.')) { current = Function.prototype[parts[2]]; }
+    else if (key.startsWith('String.prototype.')) { current = String.prototype[parts[2]]; }
+    else if (key.startsWith('XMLHttpRequest.prototype.')) { current = XMLHttpRequest.prototype[parts[2]]; }
+    else if (key.startsWith('Storage.prototype.')) { current = Storage.prototype[parts[2]]; }
+    else if (key.startsWith('EventTarget.prototype.')) { current = EventTarget.prototype[parts[2]]; }
+    else if (key.startsWith('Node.prototype.')) { current = Node.prototype[parts[2]]; }
+    else if (key.startsWith('Element.prototype.')) { current = Element.prototype[parts[2]]; }
+    else if (key.startsWith('Document.prototype.')) { current = document[parts[2]]; }
+    else if (key.startsWith('Promise.')) { current = Promise.prototype[parts[1]]; }
+    else if (key === 'window.performance.now') { current = performance.now; }
+    else if (key.startsWith('JSON.')) { current = JSON[parts[1]]; }
+    else if (key.startsWith('Object.')) { current = Object[parts[1]]; }
+    else if (key.startsWith('Reflect.')) { current = Reflect && Reflect[parts[1]]; }
+    else { current = window[parts[1]]; }
+
+    currentStr = Function.prototype.toString.call(current);
+    currentIsNative = currentStr.includes('[native code]');
+  } catch(e) {
+    return { found: true, detail: `error: ${e.message}`, severity: 'warn' };
+  }
+
+  // Reference identity check (fastest)
+  if (current !== base.ref) {
+    // Was native, now isn't → critical overwrite
+    if (base.isNative && !currentIsNative) {
+      return { found: true, detail: `native → WRAPPED fn`, severity: 'crit' };
+    }
+    // Was native, still claims native, but reference changed → spoofed toString
+    if (base.isNative && currentIsNative && current !== base.ref) {
+      return { found: true, detail: `ref changed (toString spoofed?)`, severity: 'crit' };
+    }
+    // Was non-native, changed to something else
+    if (!base.isNative && current !== base.ref) {
+      return { found: true, detail: `fn reference swapped`, severity: 'warn' };
+    }
+  }
+
+  // toString content changed even if reference is same (proxy or defineProperty trick)
+  if (currentStr !== base.str) {
+    return { found: true, detail: `toString changed`, severity: 'warn' };
+  }
+
+  // Was native, now not native (shouldn't get here but belt+suspenders)
+  if (base.isNative && !currentIsNative) {
+    return { found: true, detail: `native → user code`, severity: 'crit' };
+  }
+
+  return { found: false, detail: 'native ✓', severity: 'clean' };
+}
+
+// ─── CHECK DEFINITIONS ──────────────────────────────────────────
 const CHECKS = [
+  { sec: 'OVERWRITTEN — CONSOLE', badge: 'CRITICAL', rows: [
+    { id:'ow_cl',  name:'console.log',      fn:()=>checkOverwrite('console.log') },
+    { id:'ow_cw',  name:'console.warn',     fn:()=>checkOverwrite('console.warn') },
+    { id:'ow_ce',  name:'console.error',    fn:()=>checkOverwrite('console.error') },
+    { id:'ow_ci',  name:'console.info',     fn:()=>checkOverwrite('console.info') },
+    { id:'ow_cd',  name:'console.debug',    fn:()=>checkOverwrite('console.debug') },
+    { id:'ow_ct',  name:'console.table',    fn:()=>checkOverwrite('console.table') },
+    { id:'ow_cg',  name:'console.group',    fn:()=>checkOverwrite('console.group') },
+    { id:'ow_ctr', name:'console.trace',    fn:()=>checkOverwrite('console.trace') },
+    { id:'ow_ccl', name:'console.clear',    fn:()=>checkOverwrite('console.clear') },
+  ]},
+  { sec: 'OVERWRITTEN — WINDOW GLOBALS', badge: 'CRITICAL', rows: [
+    { id:'ow_fetch',  name:'window.fetch',          fn:()=>checkOverwrite('window.fetch') },
+    { id:'ow_open',   name:'window.open',            fn:()=>checkOverwrite('window.open') },
+    { id:'ow_alert',  name:'window.alert',           fn:()=>checkOverwrite('window.alert') },
+    { id:'ow_conf',   name:'window.confirm',         fn:()=>checkOverwrite('window.confirm') },
+    { id:'ow_prompt', name:'window.prompt',          fn:()=>checkOverwrite('window.prompt') },
+    { id:'ow_pm',     name:'window.postMessage',     fn:()=>checkOverwrite('window.postMessage') },
+    { id:'ow_sto',    name:'window.setTimeout',      fn:()=>checkOverwrite('window.setTimeout') },
+    { id:'ow_siv',    name:'window.setInterval',     fn:()=>checkOverwrite('window.setInterval') },
+    { id:'ow_raf',    name:'requestAnimationFrame',  fn:()=>checkOverwrite('window.requestAnimationFrame') },
+    { id:'ow_eval',   name:'window.eval',            fn:()=>checkOverwrite('window.eval') },
+    { id:'ow_atob',   name:'window.atob',            fn:()=>checkOverwrite('window.atob') },
+    { id:'ow_pnow',   name:'performance.now',        fn:()=>checkOverwrite('window.performance.now') },
+    { id:'ow_qmt',    name:'queueMicrotask',         fn:()=>checkOverwrite('window.queueMicrotask') },
+  ]},
+  { sec: 'OVERWRITTEN — JSON / OBJECT', badge: 'WARN', rows: [
+    { id:'ow_jp',   name:'JSON.parse',                fn:()=>checkOverwrite('JSON.parse') },
+    { id:'ow_js',   name:'JSON.stringify',             fn:()=>checkOverwrite('JSON.stringify') },
+    { id:'ow_odp',  name:'Object.defineProperty',     fn:()=>checkOverwrite('Object.defineProperty') },
+    { id:'ow_ogopd',name:'Object.getOwnPropertyDescriptor',fn:()=>checkOverwrite('Object.getOwnPropertyDescriptor')},
+    { id:'ow_oa',   name:'Object.assign',              fn:()=>checkOverwrite('Object.assign') },
+    { id:'ow_ok',   name:'Object.keys',                fn:()=>checkOverwrite('Object.keys') },
+    { id:'ow_of',   name:'Object.freeze',              fn:()=>checkOverwrite('Object.freeze') },
+    { id:'ow_fnts', name:'Function.prototype.toString',fn:()=>checkOverwrite('Function.prototype.toString') },
+    { id:'ow_fnca', name:'Function.prototype.call',    fn:()=>checkOverwrite('Function.prototype.call') },
+    { id:'ow_fnap', name:'Function.prototype.apply',   fn:()=>checkOverwrite('Function.prototype.apply') },
+    { id:'ow_fnbi', name:'Function.prototype.bind',    fn:()=>checkOverwrite('Function.prototype.bind') },
+    { id:'ow_ref',  name:'Reflect.apply',              fn:()=>checkOverwrite('Reflect.apply') },
+    { id:'ow_prx',  name:'Proxy (present)',            fn:()=>checkOverwrite('Proxy') },
+  ]},
+  { sec: 'OVERWRITTEN — ARRAY / STRING PROTOTYPE', badge: 'WARN', rows: [
+    { id:'ow_ap',  name:'Array.prototype.push',     fn:()=>checkOverwrite('Array.prototype.push') },
+    { id:'ow_am',  name:'Array.prototype.map',      fn:()=>checkOverwrite('Array.prototype.map') },
+    { id:'ow_af',  name:'Array.prototype.filter',   fn:()=>checkOverwrite('Array.prototype.filter') },
+    { id:'ow_afe', name:'Array.prototype.forEach',  fn:()=>checkOverwrite('Array.prototype.forEach') },
+    { id:'ow_asl', name:'Array.prototype.slice',    fn:()=>checkOverwrite('Array.prototype.slice') },
+    { id:'ow_asp', name:'Array.prototype.splice',   fn:()=>checkOverwrite('Array.prototype.splice') },
+    { id:'ow_ar',  name:'Array.prototype.reduce',   fn:()=>checkOverwrite('Array.prototype.reduce') },
+    { id:'ow_ai',  name:'Array.prototype.includes', fn:()=>checkOverwrite('Array.prototype.includes') },
+    { id:'ow_sr',  name:'String.prototype.replace', fn:()=>checkOverwrite('String.prototype.replace') },
+    { id:'ow_ss',  name:'String.prototype.split',   fn:()=>checkOverwrite('String.prototype.split') },
+    { id:'ow_si',  name:'String.prototype.includes',fn:()=>checkOverwrite('String.prototype.includes') },
+    { id:'ow_st',  name:'String.prototype.trim',    fn:()=>checkOverwrite('String.prototype.trim') },
+  ]},
+  { sec: 'OVERWRITTEN — XHR / STORAGE / DOM', badge: 'CRITICAL', rows: [
+    { id:'ow_xo',  name:'XHR.prototype.open',        fn:()=>checkOverwrite('XMLHttpRequest.prototype.open') },
+    { id:'ow_xs',  name:'XHR.prototype.send',        fn:()=>checkOverwrite('XMLHttpRequest.prototype.send') },
+    { id:'ow_xrh', name:'XHR.prototype.setRequestHeader',fn:()=>checkOverwrite('XMLHttpRequest.prototype.setRequestHeader') },
+    { id:'ow_lss', name:'Storage.prototype.setItem', fn:()=>checkOverwrite('Storage.prototype.setItem') },
+    { id:'ow_lsg', name:'Storage.prototype.getItem', fn:()=>checkOverwrite('Storage.prototype.getItem') },
+    { id:'ow_et',  name:'EventTarget.addEventListener',fn:()=>checkOverwrite('EventTarget.prototype.addEventListener') },
+    { id:'ow_etd', name:'EventTarget.dispatchEvent', fn:()=>checkOverwrite('EventTarget.prototype.dispatchEvent') },
+    { id:'ow_nac', name:'Node.prototype.appendChild',fn:()=>checkOverwrite('Node.prototype.appendChild') },
+    { id:'ow_esa', name:'Element.prototype.setAttribute',fn:()=>checkOverwrite('Element.prototype.setAttribute') },
+    { id:'ow_ega', name:'Element.prototype.getAttribute',fn:()=>checkOverwrite('Element.prototype.getAttribute') },
+    { id:'ow_dcr', name:'document.createElement',   fn:()=>checkOverwrite('Document.prototype.createElement') },
+    { id:'ow_dqs', name:'document.querySelector',   fn:()=>checkOverwrite('Document.prototype.querySelector') },
+    { id:'ow_pt',  name:'Promise.prototype.then',   fn:()=>checkOverwrite('Promise.then') },
+    { id:'ow_mo',  name:'MutationObserver',          fn:()=>checkOverwrite('MutationObserver') },
+  ]},
   { sec: 'GM GLOBALS', rows: [
     { id:'gm_info',    name:'GM_info',              fn:()=>chkGlobal('GM_info') },
     { id:'gm_set',     name:'GM_setValue',          fn:()=>chkGlobal('GM_setValue') },
@@ -244,20 +462,10 @@ const CHECKS = [
     { id:'dom_shadow', name:'Open shadowRoot',        fn:()=>shadowRoots() },
     { id:'dom_iframe', name:'Extension iframe',       fn:()=>extIframes() },
   ]},
-  { sec: 'HOOKS & PATCHES', rows: [
-    { id:'h_defprop',  name:'Object.defineProperty', fn:()=>nativeChk(Object.defineProperty) },
-    { id:'h_fetch',    name:'fetch() original native',fn:()=>nativeChk(window.__orig_fetch__||window.fetch) },
-    { id:'h_xhr',      name:'XHR.open original',      fn:()=>nativeStr(XMLHttpRequest.prototype.open) },
-    { id:'h_fn_tostr', name:'Function.toString',      fn:()=>fnToStr() },
-    { id:'h_json',     name:'JSON.parse native',       fn:()=>nativeChk(JSON.parse) },
-    { id:'h_eval',     name:'eval() native',           fn:()=>nativeStr(window.eval) },
-    { id:'h_ls',       name:'localStorage.setItem',   fn:()=>nativeStr(Storage.prototype.setItem) },
-    { id:'h_cookie',   name:'document.cookie native',  fn:()=>cookieChk() },
-  ]},
   { sec: 'STORAGE KEYS', rows: [
-    { id:'ls_tm',      name:'localStorage TM keys',   fn:()=>storeKeys(localStorage,'tampermonkey','tm_','gm_','userscript') },
-    { id:'ss_tm',      name:'sessionStorage TM keys', fn:()=>storeKeys(sessionStorage,'tampermonkey','tm_','gm_') },
-    { id:'idb_tm',     name:'IndexedDB TM databases', fn:()=>idbChk() },
+    { id:'ls_tm',  name:'localStorage TM keys',  fn:()=>storeKeys(localStorage,'tampermonkey','tm_','gm_','userscript') },
+    { id:'ss_tm',  name:'sessionStorage TM keys',fn:()=>storeKeys(sessionStorage,'tampermonkey','tm_','gm_') },
+    { id:'idb_tm', name:'IndexedDB TM databases', fn:()=>idbChk() },
   ]},
   { sec: 'LIVE INTERCEPTS', rows: [
     { id:'int_net',    name:'Network requests seen',  fn:()=>intCount('network') },
@@ -269,7 +477,7 @@ const CHECKS = [
   ]},
 ];
 
-// ─── HELPERS ────────────────────────────────────────────────────
+// ─── GENERIC HELPERS ────────────────────────────────────────────
 const chkGlobal = name => { try { const v=window[name]; return v!=null?{found:true,detail:`${typeof v}`}:{found:false,detail:'–'}; } catch(e){return{found:false,detail:e.message};} };
 const domQ = sel => { try { const n=document.querySelectorAll(sel).length; return n?{found:true,detail:`${n} el`}:{found:false,detail:'0'}; } catch(e){return{found:false,detail:e.message};} };
 const extScripts = () => { for(const s of document.querySelectorAll('script[src]')){ const h=s.src; if(h.startsWith('chrome-extension://')||h.startsWith('moz-extension://')) return {found:true,detail:h.slice(0,50)}; } return {found:false,detail:'none'}; };
@@ -277,25 +485,25 @@ const extLinks   = () => { for(const l of document.querySelectorAll('link')){ co
 const highZ      = () => { for(const el of document.querySelectorAll('*')){ const cs=getComputedStyle(el); if(cs.position==='fixed'&&parseInt(cs.zIndex)>9000) return {found:true,detail:`${el.tagName} z=${cs.zIndex}`}; } return {found:false,detail:'none'}; };
 const shadowRoots= () => { let c=0; for(const el of document.querySelectorAll('*')) if(el.shadowRoot) c++; return c?{found:true,detail:`${c} roots`}:{found:false,detail:'none'}; };
 const extIframes  = () => { for(const f of document.querySelectorAll('iframe')){ const s=f.src||''; if(s.startsWith('chrome-extension://')||s.startsWith('moz-extension://')) return {found:true,detail:s.slice(0,50)}; } return {found:false,detail:'none'}; };
-const nativeChk  = fn => { try { const s=Function.prototype.toString.call(fn); return !s.includes('[native code]')?{found:true,detail:'WRAPPED'}:{found:false,detail:'native'}; } catch(e){return{found:false,detail:e.message};} };
-const nativeStr  = fn => nativeChk(fn);
-const fnToStr    = () => { try { const s=Function.prototype.toString.call(Function.prototype.toString); return !s.includes('[native code]')?{found:true,detail:'toString PATCHED'}:{found:false,detail:'native'}; } catch(e){return{found:false,detail:e.message};} };
-const cookieChk  = () => { try { const d=Object.getOwnPropertyDescriptor(Document.prototype,'cookie')||Object.getOwnPropertyDescriptor(HTMLDocument.prototype,'cookie'); if(!d) return {found:true,detail:'descriptor gone'}; const s=Function.prototype.toString.call(d.get); return !s.includes('[native code]')?{found:true,detail:'getter WRAPPED'}:{found:false,detail:'native'}; } catch(e){return{found:false,detail:e.message};} };
 const storeKeys  = (store, ...pats) => { try { const k=Object.keys(store); const m=k.filter(k=>pats.some(p=>k.toLowerCase().includes(p))); return m.length?{found:true,detail:m.slice(0,3).join(', ')}:{found:false,detail:`${k.length} keys`}; } catch(e){return{found:false,detail:e.message};} };
 const idbChk     = () => new Promise(res=>{ try { const r=indexedDB.databases?.(); if(r) r.then(dbs=>{ const t=dbs.filter(d=>d.name&&(d.name.toLowerCase().includes('tamper')||d.name.toLowerCase().includes('grease'))); res(t.length?{found:true,detail:t.map(d=>d.name).join(', ')}:{found:false,detail:`${dbs.length} dbs`}); }).catch(()=>res({found:false,detail:'no access'})); else res({found:false,detail:'n/a'}); } catch(e){res({found:false,detail:e.message});} });
 const intCount   = type => { const c=window.__LOG__.filter(l=>l.type===type).length; return {found:c>0,detail:`${c} calls`}; };
 const extOriginCalls = () => { const c=window.__LOG__.filter(l=>l.ext).length; return c?{found:true,detail:`${c} ext calls`}:{found:false,detail:'0'}; };
 const extCreateEl    = () => { const c=window.__LOG__.filter(l=>l.type==='dom'&&l.ext).length; return c?{found:true,detail:`${c} ext elements`}:{found:false,detail:'0'}; };
 
-// ─── INTERCEPTOR FEED UI ────────────────────────────────────────
-const CHANS = ['console','network','storage','gm','timers','events','dom','nav','eval'];
+// Severity for non-overwrite sections (found = bad)
+const defaultSeverity = id => {
+  if(id.startsWith('gm_')||id==='unsafe'||id==='exportFn') return 'crit';
+  if(id.startsWith('dom_ext')||id.startsWith('int_ext')||id==='int_eval') return 'crit';
+  return 'warn';
+};
+
+// ─── INTERCEPT FEED ─────────────────────────────────────────────
+const CHANS = ['overwrite','console','network','storage','gm','timers','events','dom','nav','eval'];
 const chanCounts = {};
 CHANS.forEach(c => chanCounts[c] = 0);
+let activeTab = 'overwrite', filterText = '';
 
-let activeTab = 'console';
-let filterText = '';
-
-// Build tabs + feeds
 const tabsEl = document.getElementById('tabs');
 const feedsEl = document.getElementById('feeds');
 CHANS.forEach(ch => {
@@ -305,7 +513,6 @@ CHANS.forEach(ch => {
   tab.innerHTML = `${ch.toUpperCase()}<span class="ct" id="ct-${ch}">0</span>`;
   tab.onclick = () => switchTab(ch);
   tabsEl.appendChild(tab);
-
   const feed = document.createElement('div');
   feed.className = 'feed' + (ch === activeTab ? ' on' : '');
   feed.id = 'feed-' + ch;
@@ -322,88 +529,89 @@ let totalIntercepts = 0;
 function addFeedRow(entry) {
   totalIntercepts++;
   document.getElementById('total-int').textContent = totalIntercepts;
-
   const ch = entry.type;
   if (!CHANS.includes(ch)) return;
-
   chanCounts[ch] = (chanCounts[ch]||0)+1;
   const ctEl = document.getElementById('ct-'+ch);
-  if (ctEl) { ctEl.textContent = chanCounts[ch] > 99 ? '99+' : chanCounts[ch]; }
-
+  if (ctEl) ctEl.textContent = chanCounts[ch] > 99 ? '99+' : chanCounts[ch];
   if (filterText && !entry.msg.toLowerCase().includes(filterText)) return;
-
   const feed = document.getElementById('feed-'+ch);
   if (!feed) return;
-
-  // Determine sub-type for coloring
-  const subtype = ch === 'console' ? (entry.msg.includes('console.warn')?'warn':entry.msg.includes('console.error')?'error':'') : '';
-
+  const subtype = ch==='console'?(entry.msg.includes('console.warn')?'warn':entry.msg.includes('console.error')?'error':''):'';
   const row = document.createElement('div');
   row.className = 'frow' + (entry.ext ? ' ext' : '');
   row.innerHTML = `<div class="fts">${parseFloat(entry.t).toFixed(0)}ms</div><div class="fmsg ${ch} ${subtype}">${escH(entry.msg)}</div>`;
   feed.appendChild(row);
-
-  // Auto-scroll
-  if (document.getElementById('chk-auto')?.checked !== false) {
-    feed.scrollTop = feed.scrollHeight;
-  }
-
-  // Trim to 200 rows per feed
+  feed.scrollTop = feed.scrollHeight;
   while (feed.children.length > 200) feed.removeChild(feed.firstChild);
 }
-
 window.addEventListener('__log__', e => addFeedRow(e.detail));
+
+// Emit overwrite events to the overwrite feed
+function emitOverwrite(key, res) {
+  const entry = { t: performance.now().toFixed(1), type: 'overwrite', msg: `[${res.severity.toUpperCase()}] ${key}: ${res.detail}`, ext: false };
+  window.__LOG__.push(entry);
+  addFeedRow(entry);
+}
 
 // ─── CHECKS UI ──────────────────────────────────────────────────
 function buildChecks() {
   const el = document.getElementById('checks');
   el.innerHTML = '';
-  let total = 0;
   CHECKS.forEach(sec => {
-    total += sec.rows.length;
+    const isOverwrite = sec.sec.startsWith('OVERWRITTEN');
     const div = document.createElement('div');
     div.className = 'section';
+    const secId = sec.sec.replace(/[\s—]+/g,'-');
     div.innerHTML = `
-      <div class="sec-head">
+      <div class="sec-head${isOverwrite?' warn-sec':''}">
         <span class="sec-title">${sec.sec}</span>
-        <span class="sec-ct" id="sct-${sec.sec.replace(/\s/g,'-')}">0/${sec.rows.length}</span>
+        <span class="sec-ct" id="sct-${secId}">0/${sec.rows.length}</span>
       </div>
-      <div class="rows" id="sec-${sec.sec.replace(/\s/g,'-')}">
+      <div class="rows" id="sec-${secId}">
         ${sec.rows.map(r => rowHTML(r.id, r.name, 'p', '')).join('')}
       </div>`;
     el.appendChild(div);
   });
-  return total;
 }
 
-function rowHTML(id, name, state, detail) {
-  const dot = state==='p'?'dot-p':state==='h'?'dot-h':state==='r'?'dot-r':'dot-m';
-  const dc  = state==='h'?'h':'m';
+function rowHTML(id, name, state, detail, severity) {
+  const isHit = state === 'h';
+  const dotClass = state==='p'?'dot-p':state==='r'?'dot-r':isHit?(severity==='clean'?'dot-hg':'dot-h'):'dot-m';
+  const detClass = isHit?(severity==='clean'?'hg':'h'):'m';
   return `<div class="row" id="row-${id}">
-    <div class="dot ${dot}" id="dot-${id}"></div>
+    <div class="dot ${dotClass}" id="dot-${id}"></div>
     <div class="rname">${escH(name)}</div>
-    <div class="rdetail ${dc}" id="det-${id}">${escH(detail)}</div>
+    <div class="rdetail ${detClass}" id="det-${id}">${escH(detail)}</div>
   </div>`;
 }
 
-function updateRow(id, state, detail) {
+function updateRow(id, state, detail, severity) {
+  const row = document.getElementById('row-'+id);
   const dot = document.getElementById('dot-'+id);
   const det = document.getElementById('det-'+id);
-  if (!dot || !det) return;
-  dot.className = 'dot ' + (state==='h'?'dot-h':state==='r'?'dot-r':'dot-m');
-  det.className = 'rdetail ' + (state==='h'?'h':'m');
+  if (!dot || !det || !row) return;
+  const isHit = state === 'h';
+  dot.className = 'dot ' + (state==='r'?'dot-r':state==='p'?'dot-p':isHit?(severity==='clean'?'dot-hg':'dot-h'):'dot-m');
+  det.className = 'rdetail ' + (isHit?(severity==='clean'?'hg':'h'):'m');
   det.textContent = detail||'';
+  if (isHit && severity !== 'clean') {
+    row.classList.add('overwrite-hit');
+  } else {
+    row.classList.remove('overwrite-hit');
+  }
 }
 
 function updateSecCount(secName) {
   const sec = CHECKS.find(s=>s.sec===secName);
   if (!sec) return;
   const found = sec.rows.filter(r => state.results[r.id]?.found).length;
-  const el = document.getElementById('sct-'+secName.replace(/\s/g,'-'));
+  const id = secName.replace(/[\s—]+/g,'-');
+  const el = document.getElementById('sct-'+id);
   if (el) el.textContent = `${found}/${sec.rows.length}`;
 }
 
-// ─── SCAN STATE ──────────────────────────────────────────────────
+// ─── SCAN STATE ─────────────────────────────────────────────────
 const state = { results:{}, running:false, watchObs:null, watchPoll:null };
 
 async function runScan() {
@@ -411,56 +619,92 @@ async function runScan() {
   state.running = true;
   state.results = {};
   buildChecks();
-  let total=0, found=0, done=0;
+  document.getElementById('summary').style.display = 'flex';
+  let total=0, critCount=0, warnCount=0, cleanCount=0, done=0;
   const allRows = CHECKS.flatMap(s => s.rows.map(r=>({...r,sec:s.sec})));
-  allRows.forEach(r=>{total++;});
+  allRows.forEach(() => total++);
   setStatus(`scanning 0/${total}…`);
   setVerdict('wait');
+
+  // Show baseline timestamp
+  const bt = window.__BASELINE__['__taken__'];
+  document.getElementById('s-baseline').textContent = bt ? `${bt.toFixed(0)}ms before page scripts` : 'unknown';
 
   for (const r of allRows) {
     updateRow(r.id,'r','…');
     let res;
     try { const raw=r.fn(); res = raw instanceof Promise ? await raw : raw; }
-    catch(e) { res={found:false,detail:e.message}; }
-    state.results[r.id]=res;
-    updateRow(r.id, res.found?'h':'m', res.detail||'');
+    catch(e) { res={found:false,detail:e.message,severity:'info'}; }
+
+    // Normalise severity
+    if (!res.severity) {
+      res.severity = res.found ? defaultSeverity(r.id) : 'clean';
+    }
+    if (!res.found) res.severity = 'clean';
+
+    state.results[r.id] = res;
+
+    // Emit overwrite hits to the feed
+    if (res.found && r.id.startsWith('ow_')) emitOverwrite(r.name, res);
+
+    updateRow(r.id, res.found?'h':'m', res.detail||'', res.severity);
     updateSecCount(r.sec);
     done++;
-    if(res.found) found++;
-    setStatus(`${done}/${total} — ${found} hit${found!==1?'s':''}`);
-    setVerdict(done<total?'wait':found>0?'hit':'miss');
-    await sleep(6);
+
+    if (res.found) {
+      if (res.severity === 'crit') critCount++;
+      else if (res.severity === 'warn') warnCount++;
+      else cleanCount++;
+    } else {
+      cleanCount++;
+    }
+
+    document.getElementById('s-crit').textContent = critCount;
+    document.getElementById('s-warn').textContent = warnCount;
+    document.getElementById('s-clean').textContent = cleanCount;
+    document.getElementById('s-total').textContent = done;
+
+    setStatus(`${done}/${total} — ${critCount} crit · ${warnCount} warn`);
+    setVerdict(done < total ? 'wait' : critCount > 0 ? 'hit' : warnCount > 0 ? 'partial' : 'miss');
+    await sleep(4);
   }
-  setStatus(`complete — ${found}/${total} signals`);
-  state.running=false;
+  setStatus(`complete — ${critCount} critical · ${warnCount} warnings · ${cleanCount} clean`);
+  state.running = false;
 }
 
 function setStatus(s) { document.getElementById('status-text').textContent=s; }
 function setVerdict(v) {
   const el=document.getElementById('verdict');
-  if(v==='wait') { el.className='verdict v-wait'; el.textContent='SCANNING…'; }
-  else if(v==='hit') { el.className='verdict v-hit'; el.textContent='⚡ DETECTED'; }
-  else { el.className='verdict v-miss'; el.textContent='✕ CLEAN'; }
+  if(v==='wait')    { el.className='verdict v-wait'; el.textContent='SCANNING…'; }
+  else if(v==='hit'){ el.className='verdict v-hit'; el.textContent='⚡ OVERWRITES DETECTED'; }
+  else if(v==='partial'){ el.className='verdict v-wait'; el.textContent='⚠ WARNINGS FOUND'; }
+  else              { el.className='verdict v-miss'; el.textContent='✓ CLEAN'; }
 }
 
-// ─── LIVE WATCH ──────────────────────────────────────────────────
+// ─── LIVE WATCH ─────────────────────────────────────────────────
 let watchOn=false;
 function toggleWatch() {
   watchOn=!watchOn;
   const btn=document.getElementById('btn-watch');
   if(watchOn) {
     btn.textContent='◉ STOP WATCH'; btn.className='btn btn-r';
-    state.watchObs=new MutationObserver(muts=>{
-      for(const m of muts) for(const n of m.addedNodes) if(n.nodeType===1) {
-        const tag=n.tagName||'?', cls=String(n.className||''), id=n.id||'';
-        if(['SCRIPT','IFRAME','LINK'].includes(tag)||cls.includes('tm-')||id.includes('tm-')) {
-          window.__LOG__.push({t:performance.now().toFixed(1),type:'dom',msg:`DOM inject: <${tag}${id?'#'+id:''}${cls?' .'+cls.split(' ')[0]:''}>`});
-          window.dispatchEvent(new CustomEvent('__log__',{detail:window.__LOG__[window.__LOG__.length-1]}));
+    // Poll for runtime overwrites that happen after page load
+    state.watchPoll=setInterval(()=>{
+      const owKeys = Object.keys(window.__BASELINE__).filter(k => k !== '__taken__');
+      for (const key of owKeys) {
+        const r = checkOverwrite(key);
+        if (r.found) {
+          const already = state._watchAlerted?.[key];
+          if (!already) {
+            state._watchAlerted = state._watchAlerted||{};
+            state._watchAlerted[key]=true;
+            const entry = { t: performance.now().toFixed(1), type:'overwrite', msg:`[RUNTIME] ${key} overwritten: ${r.detail}`, ext:false };
+            window.__LOG__.push(entry);
+            window.dispatchEvent(new CustomEvent('__log__',{detail:entry}));
+          }
         }
       }
-    });
-    state.watchObs.observe(document.documentElement,{childList:true,subtree:true});
-    state.watchPoll=setInterval(()=>{
+      // Also check for GM globals appearing
       ['GM_info','GM_setValue','GM_getValue','unsafeWindow'].forEach(g=>{
         if(window[g]!==undefined&&!state._seen?.[g]){
           state._seen=state._seen||{};state._seen[g]=1;
@@ -468,39 +712,44 @@ function toggleWatch() {
           window.dispatchEvent(new CustomEvent('__log__',{detail:window.__LOG__[window.__LOG__.length-1]}));
         }
       });
-    },400);
+    },300);
+    state.watchObs=new MutationObserver(muts=>{
+      for(const m of muts) for(const n of m.addedNodes) if(n.nodeType===1) {
+        const tag=n.tagName||'?', cls=String(n.className||''), id=n.id||'';
+        if(['SCRIPT','IFRAME','LINK'].includes(tag)||cls.includes('tm-')||id.includes('tm-')) {
+          const e={t:performance.now().toFixed(1),type:'dom',msg:`DOM inject: <${tag}${id?'#'+id:''}${cls?' .'+cls.split(' ')[0]:''}>`};
+          window.__LOG__.push(e); window.dispatchEvent(new CustomEvent('__log__',{detail:e}));
+        }
+      }
+    });
+    state.watchObs.observe(document.documentElement,{childList:true,subtree:true});
   } else {
     btn.textContent='◉ LIVE WATCH'; btn.className='btn btn-g';
     state.watchObs?.disconnect(); clearInterval(state.watchPoll);
   }
 }
 
-// ─── CONTROLS ────────────────────────────────────────────────────
+// ─── CONTROLS ───────────────────────────────────────────────────
 document.getElementById('btn-scan').onclick = runScan;
 document.getElementById('btn-watch').onclick = toggleWatch;
 document.getElementById('btn-reset').onclick = ()=>{
   if(state.running) return;
   if(watchOn) toggleWatch();
-  state.results={};
+  state.results={}; state._watchAlerted={}; state._seen={};
   buildChecks();
+  document.getElementById('summary').style.display = 'none';
   setStatus('ready'); setVerdict('wait');
 };
 document.getElementById('btn-clr').onclick = ()=>{
   CHANS.forEach(ch=>{ const f=document.getElementById('feed-'+ch); if(f) f.innerHTML=''; chanCounts[ch]=0; const c=document.getElementById('ct-'+ch); if(c) c.textContent='0'; });
-  totalIntercepts=0; document.getElementById('total-int').textContent='0';
-  window.__LOG__=[];
+  totalIntercepts=0; document.getElementById('total-int').textContent='0'; window.__LOG__=[];
 };
-document.getElementById('int-search').oninput = function() {
-  filterText=this.value.toLowerCase();
-};
+document.getElementById('int-search').oninput = function() { filterText=this.value.toLowerCase(); };
 
-// ─── UTILS ───────────────────────────────────────────────────────
 const escH = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
-// ─── INIT ────────────────────────────────────────────────────────
 buildChecks();
-// Replay any intercepts that fired before the feed was built
 window.__LOG__.forEach(addFeedRow);
 </script>
 </body>
